@@ -995,3 +995,245 @@ body {
 .drop-zone { animation: fadeInUp 0.5s ease 0.1s backwards; }
 .control-panel { animation: fadeInUp 0.5s ease 0.2s backwards; }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   LICENSE BAR & UPGRADE MODAL
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+.license-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--grid-accent);
+    padding: var(--space-sm) var(--space-xl);
+}
+
+.license-status {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-md);
+    font-size: 0.8rem;
+}
+
+.license-status.trial .license-icon {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.license-status.licensed {
+    color: var(--accent-primary);
+}
+
+.license-bar.licensed {
+    background: linear-gradient(90deg, rgba(0, 255, 136, 0.1), transparent, rgba(0, 255, 136, 0.1));
+    border-bottom-color: var(--accent-primary);
+}
+
+.license-bar.expired {
+    background: rgba(255, 71, 87, 0.1);
+    border-bottom-color: var(--error);
+}
+
+.license-bar.expired .license-text {
+    color: var(--error);
+}
+
+.btn-upgrade {
+    padding: var(--space-xs) var(--space-md);
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--bg-primary);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-upgrade:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
+/* Upgrade Modal */
+.upgrade-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.upgrade-modal-content {
+    background: var(--bg-secondary);
+    border: 2px solid var(--accent-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--space-2xl);
+    max-width: 450px;
+    width: 90%;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 0 50px var(--accent-glow);
+    animation: scaleIn 0.3s ease;
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-close {
+    position: absolute;
+    top: var(--space-md);
+    right: var(--space-md);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.modal-close:hover {
+    color: var(--error);
+}
+
+.upgrade-modal h2 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    letter-spacing: 0.1em;
+    margin-bottom: var(--space-lg);
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.upgrade-price {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+    margin-bottom: var(--space-lg);
+}
+
+.upgrade-price span {
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--text-secondary);
+    display: block;
+}
+
+.upgrade-features {
+    list-style: none;
+    text-align: left;
+    margin-bottom: var(--space-xl);
+}
+
+.upgrade-features li {
+    padding: var(--space-sm) 0;
+    color: var(--text-secondary);
+}
+
+.upgrade-features li::before {
+    color: var(--accent-primary);
+    margin-right: var(--space-sm);
+}
+
+.btn-checkout {
+    width: 100%;
+    padding: var(--space-lg);
+    background: linear-gradient(135deg, var(--accent-primary), #00cc6a);
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--bg-primary);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: var(--space-xl);
+}
+
+.btn-checkout:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+}
+
+.license-input-section {
+    padding-top: var(--space-lg);
+    border-top: 1px solid var(--grid-accent);
+}
+
+.license-input-section p {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+}
+
+.license-input-row {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.license-input-row input {
+    flex: 1;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--text-muted);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.license-input-row input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.license-input-row button {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    color: var(--accent-primary);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.license-input-row button:hover {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+}
+
+.upgrade-note {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: var(--space-lg);
+}
+
+/* Adjust container for license bar */
+.container {
+    padding-top: calc(var(--space-xl) + 40px);
+}
+

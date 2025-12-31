@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Successful | STEM SPLITTER</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0b0f;
+            --bg-secondary: #12141c;
+            --accent-primary: #00ff88;
+            --accent-secondary: #00d4ff;
+            --text-primary: #ffffff;
+            --text-secondary: #8892a4;
+            --font-display: 'Orbitron', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: var(--font-mono);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 500px;
+            text-align: center;
+        }
+        
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 2rem;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            animation: pulse 2s ease-in-out infinite;
+            box-shadow: 0 0 50px rgba(0, 255, 136, 0.5);
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 50px rgba(0, 255, 136, 0.5); }
+            50% { transform: scale(1.05); box-shadow: 0 0 80px rgba(0, 255, 136, 0.7); }
+        }
+        
+        h1 {
+            font-family: var(--font-display);
+            font-size: 1.5rem;
+            letter-spacing: 0.2em;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+        
+        .license-box {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-primary);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 0 30px rgba(0, 255, 136, 0.2);
+        }
+        
+        .license-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+        
+        .license-key {
+            font-family: var(--font-mono);
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            letter-spacing: 0.1em;
+            word-break: break-all;
+            padding: 1rem;
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .license-key:hover {
+            background: rgba(0, 255, 136, 0.2);
+        }
+        
+        .copy-hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        
+        .features {
+            text-align: left;
+            margin-bottom: 2rem;
+        }
+        
+        .features li {
+            list-style: none;
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            color: var(--text-secondary);
+        }
+        
+        .features li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--accent-primary);
+        }
+        
+        .btn-start {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--accent-primary), #00cc6a);
+            border: none;
+            border-radius: 8px;
+            color: var(--bg-primary);
+            font-family: var(--font-display);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+        }
+        
+        .save-reminder {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 204, 0, 0.1);
+            border: 1px solid rgba(255, 204, 0, 0.3);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: #ffcc00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">✓</div>
+        
+        <h1>PAYMENT SUCCESSFUL</h1>
+        <p class="subtitle">Welcome to the unlimited club</p>
+        
+        <div class="license-box">
+            <div class="license-label">Your License Key</div>
+            <div class="license-key" id="licenseKey" onclick="copyLicense()">
+                {{ license_key or 'XXXX-XXXX-XXXX-XXXX' }}
+            </div>
+            <div class="copy-hint" id="copyHint">Click to copy</div>
+        </div>
+        
+        <ul class="features">
+            <li>Unlimited stem separations forever</li>
+            <li>All quality modes (Lightning to Pristine)</li>
+            <li>All output formats and sample rates</li>
+            <li>No watermarks, no limits</li>
+            <li>Free updates for life</li>
+        </ul>
+        
+        <a href="/" class="btn-start">START SPLITTING →</a>
+        
+        <div class="save-reminder">
+            ⚠️ <strong>Save your license key!</strong> You'll need it to activate on other devices.
+        </div>
+    </div>
+    
+    <script>
+        function copyLicense() {
+            const key = document.getElementById('licenseKey').textContent.trim();
+            navigator.clipboard.writeText(key).then(() => {
+                document.getElementById('copyHint').textContent = 'Copied! ✓';
+                setTimeout(() => {
+                    document.getElementById('copyHint').textContent = 'Click to copy';
+                }, 2000);
+            });
+        }
+        
+        // Auto-activate license for this device
+        {% if license_key %}
+        fetch('/api/activate-license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ license_key: '{{ license_key }}' })
+        });
+        {% endif %}
+    </script>
+</body>
+</html>
+

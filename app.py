@@ -4,6 +4,8 @@
 ║                     "Splitting atoms... I mean, audio"                        ║
 ║                                                                               ║
 ║  Powered by Demucs - The open-source audio separation engine from Meta       ║
+║                                                                               ║
+║  Pricing: 2 free songs → $40 once → Unlimited forever                        ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -12,13 +14,26 @@ import uuid
 import shutil
 import subprocess
 from pathlib import Path
-from flask import Flask, request, jsonify, send_file, render_template, send_from_directory
+from flask import Flask, request, jsonify, send_file, render_template, send_from_directory, url_for
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import torch
 
+# Import licensing system
+from licensing import (
+    init_licensing, db, 
+    get_or_create_device, require_processing_rights,
+    create_checkout_session, handle_successful_payment, process_webhook_event,
+    activate_license_for_device, License,
+    FREE_TRIAL_SONGS, PRODUCT_PRICE_USD
+)
+
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "stem-splitter-dev-key-change-in-prod")
 CORS(app)
+
+# Initialize licensing/payment system
+init_licensing(app)
 
 # Configuration
 UPLOAD_FOLDER = Path("uploads")
@@ -218,18 +233,30 @@ def index():
 @app.route("/api/info")
 def info():
     """Return system info and available options."""
-    device = get_device()
+    device_hw = get_device()
+    user_device = get_or_create_device()
+    
     return jsonify({
-        "device": device,
-        "gpu_available": device != "cpu",
+        "device": device_hw,
+        "gpu_available": device_hw != "cpu",
         "models": list(MODELS.keys()),
         "formats": list(OUTPUT_FORMATS.keys()),
         "sample_rates": list(SAMPLE_RATES.keys()),
         "stems": ["vocals", "instrumental", "drums", "bass", "other", "all"],
+        # Licensing info
+        "license": {
+            "is_trial": user_device.is_trial,
+            "is_licensed": not user_device.is_trial,
+            "songs_processed": user_device.songs_processed,
+            "songs_remaining": user_device.songs_remaining if user_device.is_trial else "unlimited",
+            "free_trial_total": FREE_TRIAL_SONGS,
+            "upgrade_price_usd": PRODUCT_PRICE_USD / 100,
+        }
     })
 
 
 @app.route("/api/separate", methods=["POST"])
+@require_processing_rights
 def separate():
     """
     Main separation endpoint.
@@ -239,6 +266,8 @@ def separate():
         - quality: lightning | balanced | pristine | 6stem
         - format: wav | mp3_320 | mp3_256 | mp3_192 | flac | ogg
         - stems: vocals | drums | bass | other | all
+    
+    Requires: Trial songs remaining OR valid license
     """
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -331,6 +360,13 @@ def separate():
                 convert_audio_format(stem_file, output_path, format_config, sample_rate_hz)
                 result_files[stem_name] = str(output_path)
         
+        # Increment usage counter
+        device = request.device
+        device.songs_processed += 1
+        if device.license:
+            device.license.total_songs_processed += 1
+        db.session.commit()
+        
         return jsonify({
             "job_id": job_id,
             "status": "complete",
@@ -338,6 +374,12 @@ def separate():
             "download_urls": {
                 name: f"/api/download/{job_id}/{Path(path).name}"
                 for name, path in result_files.items()
+            },
+            # Include updated license info
+            "license": {
+                "is_trial": device.is_trial,
+                "songs_processed": device.songs_processed,
+                "songs_remaining": device.songs_remaining if device.is_trial else "unlimited",
             }
         })
         
@@ -381,6 +423,144 @@ def cleanup(job_id):
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PAYMENT & LICENSING ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/checkout", methods=["POST"])
+def checkout():
+    """
+    Create a Stripe Checkout session for the $40 one-time payment.
+    Returns the checkout URL to redirect the user to.
+    """
+    try:
+        # Build success/cancel URLs
+        base_url = request.host_url.rstrip('/')
+        success_url = f"{base_url}/success"
+        cancel_url = f"{base_url}/"
+        
+        session = create_checkout_session(success_url, cancel_url)
+        
+        return jsonify({
+            "checkout_url": session.url,
+            "session_id": session.id
+        })
+    
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Payment error: {str(e)}"}), 500
+
+
+@app.route("/success")
+def payment_success():
+    """
+    Payment success page - verify payment and show license key.
+    """
+    session_id = request.args.get('session_id')
+    license_key = request.args.get('license_key')
+    
+    if session_id:
+        # Verify the payment
+        success, result = handle_successful_payment(session_id)
+        if success:
+            license_key = result
+    
+    return render_template("success.html", license_key=license_key)
+
+
+@app.route("/api/verify-payment", methods=["POST"])
+def verify_payment():
+    """
+    Verify a payment session and return the license key.
+    Called by frontend after redirect from Stripe.
+    """
+    data = request.get_json()
+    session_id = data.get('session_id')
+    
+    if not session_id:
+        return jsonify({"error": "No session ID provided"}), 400
+    
+    success, result = handle_successful_payment(session_id)
+    
+    if success:
+        return jsonify({
+            "success": True,
+            "license_key": result,
+            "message": "Payment successful! Your license key is ready."
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": result
+        }), 400
+
+
+@app.route("/api/activate-license", methods=["POST"])
+def activate_license():
+    """
+    Activate a license key for the current device.
+    """
+    data = request.get_json()
+    license_key = data.get('license_key', '').strip().upper()
+    
+    if not license_key:
+        return jsonify({"error": "No license key provided"}), 400
+    
+    device = get_or_create_device()
+    success, message = activate_license_for_device(device, license_key)
+    
+    if success:
+        return jsonify({
+            "success": True,
+            "message": message,
+            "license": {
+                "is_trial": False,
+                "is_licensed": True,
+                "songs_remaining": "unlimited"
+            }
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": message
+        }), 400
+
+
+@app.route("/api/webhook/stripe", methods=["POST"])
+def stripe_webhook():
+    """
+    Stripe webhook endpoint for payment events.
+    """
+    payload = request.get_data()
+    sig_header = request.headers.get('Stripe-Signature')
+    
+    try:
+        event_type = process_webhook_event(payload, sig_header)
+        return jsonify({"received": True, "type": event_type})
+    
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/license-status")
+def license_status():
+    """
+    Get current license/trial status for the device.
+    """
+    device = get_or_create_device()
+    
+    return jsonify({
+        "is_trial": device.is_trial,
+        "is_licensed": not device.is_trial,
+        "songs_processed": device.songs_processed,
+        "songs_remaining": device.songs_remaining if device.is_trial else "unlimited",
+        "free_trial_total": FREE_TRIAL_SONGS,
+        "can_process": device.can_process,
+        "upgrade_price_usd": PRODUCT_PRICE_USD / 100,
+    })
 
 
 if __name__ == "__main__":

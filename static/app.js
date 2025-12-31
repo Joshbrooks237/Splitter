@@ -8,6 +8,7 @@ class StemSplitter {
         this.selectedFile = null;
         this.jobId = null;
         this.stemsData = null;
+        this.licenseInfo = null;
         
         this.init();
     }
@@ -130,12 +131,165 @@ class StemSplitter {
             statusDot.classList.add('active');
             statusText.textContent = data.device.toUpperCase() + ' Ready';
             
+            // Store and display license info
+            if (data.license) {
+                this.licenseInfo = data.license;
+                this.updateLicenseUI();
+            }
+            
             console.log('🎛️ System Status:', data);
+            console.log('📜 License:', data.license);
         } catch (error) {
             console.error('Failed to fetch system info:', error);
             const statusText = this.deviceStatus.querySelector('.status-text');
             statusText.textContent = 'Offline';
         }
+    }
+    
+    updateLicenseUI() {
+        const licenseBar = document.getElementById('licenseBar');
+        if (!licenseBar || !this.licenseInfo) return;
+        
+        const { is_trial, songs_processed, songs_remaining, is_licensed } = this.licenseInfo;
+        
+        if (is_licensed) {
+            licenseBar.innerHTML = `
+                <div class="license-status licensed">
+                    <span class="license-icon">✓</span>
+                    <span class="license-text">UNLIMITED LICENSE</span>
+                </div>
+            `;
+            licenseBar.classList.add('licensed');
+        } else {
+            const remaining = songs_remaining;
+            licenseBar.innerHTML = `
+                <div class="license-status trial">
+                    <span class="license-icon">🎁</span>
+                    <span class="license-text">FREE TRIAL: ${remaining} song${remaining !== 1 ? 's' : ''} remaining</span>
+                    <button class="btn-upgrade" onclick="window.stemSplitter.showUpgradeModal()">
+                        Upgrade $40
+                    </button>
+                </div>
+            `;
+            licenseBar.classList.remove('licensed');
+            
+            if (remaining === 0) {
+                licenseBar.classList.add('expired');
+            }
+        }
+    }
+    
+    async showUpgradeModal() {
+        // Create and show upgrade modal
+        const modal = document.createElement('div');
+        modal.className = 'upgrade-modal';
+        modal.innerHTML = `
+            <div class="upgrade-modal-content">
+                <button class="modal-close" onclick="this.closest('.upgrade-modal').remove()">✕</button>
+                <h2>🚀 UPGRADE TO UNLIMITED</h2>
+                <p class="upgrade-price">$40 <span>one-time payment</span></p>
+                
+                <ul class="upgrade-features">
+                    <li>✓ Unlimited stem separations forever</li>
+                    <li>✓ All quality modes (Lightning → Pristine)</li>
+                    <li>✓ All output formats & sample rates</li>
+                    <li>✓ No watermarks, no limits</li>
+                    <li>✓ Free updates for life</li>
+                </ul>
+                
+                <button class="btn-checkout" onclick="window.stemSplitter.startCheckout()">
+                    💳 Pay with Card
+                </button>
+                
+                <div class="license-input-section">
+                    <p>Already have a license key?</p>
+                    <div class="license-input-row">
+                        <input type="text" id="licenseKeyInput" placeholder="XXXX-XXXX-XXXX-XXXX">
+                        <button onclick="window.stemSplitter.activateLicense()">Activate</button>
+                    </div>
+                </div>
+                
+                <p class="upgrade-note">Secure payment via Stripe. No subscription.</p>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    async startCheckout() {
+        try {
+            const response = await fetch('/api/checkout', { method: 'POST' });
+            const data = await response.json();
+            
+            if (data.checkout_url) {
+                window.location.href = data.checkout_url;
+            } else {
+                this.showError(data.error || 'Failed to start checkout');
+            }
+        } catch (error) {
+            this.showError('Payment error: ' + error.message);
+        }
+    }
+    
+    async activateLicense() {
+        const input = document.getElementById('licenseKeyInput');
+        const key = input.value.trim().toUpperCase();
+        
+        if (!key) {
+            this.showError('Please enter a license key');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/activate-license', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ license_key: key })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Update license info and UI
+                this.licenseInfo = data.license;
+                this.updateLicenseUI();
+                
+                // Close modal
+                document.querySelector('.upgrade-modal')?.remove();
+                
+                // Show success
+                this.showSuccess('License activated! Unlimited stems unlocked.');
+            } else {
+                this.showError(data.error || 'Invalid license key');
+            }
+        } catch (error) {
+            this.showError('Activation error: ' + error.message);
+        }
+    }
+    
+    showSuccess(message) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #00ff88;
+            color: #0a0b0f;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            z-index: 1000;
+            animation: fadeInUp 0.3s ease;
+        `;
+        toast.textContent = '✓ ' + message;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 5000);
     }
     
     handleDragOver(e) {
@@ -311,11 +465,23 @@ class StemSplitter {
             const result = await response.json();
             
             if (!response.ok) {
+                // Check if trial expired
+                if (response.status === 402 && result.trial_expired) {
+                    this.showUpgradeModal();
+                    throw new Error('Trial expired - upgrade to continue');
+                }
                 throw new Error(result.error || 'Separation failed');
             }
             
             this.jobId = result.job_id;
             this.stemsData = result;
+            
+            // Update license info after processing
+            if (result.license) {
+                this.licenseInfo = result.license;
+                this.updateLicenseUI();
+            }
+            
             this.showResults();
             
         } catch (error) {
