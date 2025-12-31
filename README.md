@@ -234,12 +234,22 @@ The system automatically detects and utilizes:
 
 <br>
 
+<p align="center">
+  <strong>🎁 2 FREE SONGS TO TRY &nbsp;→&nbsp; $40 ONCE, UNLIMITED FOREVER</strong>
+</p>
+
 <table>
 <tr>
 <th></th>
 <th>STEM SPLITTER</th>
 <th>LALAL.AI</th>
 <th>Others</th>
+</tr>
+<tr>
+<td><strong>Free Trial</strong></td>
+<td>🟢 <strong>2 full songs</strong></td>
+<td>🟡 10 min preview</td>
+<td>🔴 Limited</td>
 </tr>
 <tr>
 <td><strong>Price</strong></td>
@@ -284,10 +294,10 @@ The system automatically detects and utilizes:
 <td>🟡 Varies</td>
 </tr>
 <tr>
-<td><strong>Unlimited Uses</strong></td>
-<td>🟢 Forever</td>
-<td>🔴 Credits</td>
-<td>🔴 Limits</td>
+<td><strong>After Purchase</strong></td>
+<td>🟢 Unlimited Forever</td>
+<td>🔴 Credits expire</td>
+<td>🔴 Limits reset</td>
 </tr>
 </table>
 
@@ -337,7 +347,7 @@ The DJ who needs that acapella at 3 AM.
 The musician who wants to learn from the masters.
 The creator who refuses to be subscription-trapped.
 
-**$40 once. Unlimited stems. Forever yours.**
+**2 songs free. Then $40 once. Unlimited forever.**
 
 <br>
 
