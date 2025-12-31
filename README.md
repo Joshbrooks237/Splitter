@@ -243,9 +243,21 @@ The system automatically detects and utilizes:
 </tr>
 <tr>
 <td><strong>Price</strong></td>
-<td>🟢 FREE</td>
+<td>🟢 <strong>$40 once. Forever.</strong></td>
 <td>🔴 $30+/month</td>
 <td>🔴 $$$/month</td>
+</tr>
+<tr>
+<td><strong>After 2 months</strong></td>
+<td>🟢 Still $40</td>
+<td>🔴 $60+</td>
+<td>🔴 $$$+</td>
+</tr>
+<tr>
+<td><strong>After 1 year</strong></td>
+<td>🟢 Still $40</td>
+<td>🔴 $360+</td>
+<td>🔴 $$$$</td>
 </tr>
 <tr>
 <td><strong>Privacy</strong></td>
@@ -272,8 +284,8 @@ The system automatically detects and utilizes:
 <td>🟡 Varies</td>
 </tr>
 <tr>
-<td><strong>Unlimited</strong></td>
-<td>🟢 Yes</td>
+<td><strong>Unlimited Uses</strong></td>
+<td>🟢 Forever</td>
 <td>🔴 Credits</td>
 <td>🔴 Limits</td>
 </tr>
@@ -320,12 +332,12 @@ This is **deep learning** applied to the fundamental nature of sound.
 
 This tool was built for the **underdog artist**.
 
-The bedroom producer who can't afford $30/month.
+The bedroom producer who can't afford $30/month forever.
 The DJ who needs that acapella at 3 AM.
 The musician who wants to learn from the masters.
-The creator who refuses to be paywalled.
+The creator who refuses to be subscription-trapped.
 
-**Your music. Your stems. Your rules.**
+**$40 once. Unlimited stems. Forever yours.**
 
 <br>
 
