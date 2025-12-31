@@ -1,207 +1,373 @@
-# 🎛️ STEM SPLITTER
+<p align="center">
+  <img src="https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/soundcloud.svg" width="120" alt="STEM SPLITTER"/>
+</p>
 
-### Audio Alchemy Laboratory
-*"Splitting atoms... I mean, audio frequencies"*
+<h1 align="center">
+  S T E M &nbsp; S P L I T T E R
+</h1>
 
-A powerful, beautiful web application for separating audio tracks into individual stems using **Demucs** - Meta's state-of-the-art audio source separation model.
+<p align="center">
+  <strong>Audio Alchemy Laboratory</strong>
+</p>
 
-![License](https://img.shields.io/badge/license-MIT-green)
-![Python](https://img.shields.io/badge/python-3.9+-blue)
-![Demucs](https://img.shields.io/badge/powered%20by-Demucs-orange)
+<p align="center">
+  <em>"In the beginning, there was silence.<br>
+  Then came the sound. And the sound was everything.<br>
+  But what if you could tear it apart?<br>
+  Separate the voice from the void.<br>
+  The drums from the dream.<br>
+  The bass from the beyond."</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/POWERED_BY-DEMUCS-00ff88?style=for-the-badge&labelColor=0a0b0f"/>
+  <img src="https://img.shields.io/badge/META_AI-RESEARCH-00d4ff?style=for-the-badge&labelColor=0a0b0f"/>
+  <img src="https://img.shields.io/badge/STATUS-OPERATIONAL-ff6b00?style=for-the-badge&labelColor=0a0b0f"/>
+</p>
 
 ---
 
-## ✨ Features
+<br>
 
-- **🎯 Drag & Drop Interface** - Simply drag any audio file into the window
-- **⚡ Multiple Quality Modes**
-  - Lightning: Fast processing, good quality
-  - Balanced: Default, optimal balance
-  - Pristine: Best quality, fine-tuned model
-  - 6-Stem: Adds piano and guitar separation
-- **🎵 Flexible Stem Selection** - Extract all stems or just what you need (vocals, drums, bass, other)
-- **📦 Multiple Output Formats** - WAV, FLAC, MP3 (320/256/192kbps), OGG
-- **🖥️ GPU Acceleration** - Automatic detection of CUDA/MPS for faster processing
-- **🎨 Beautiful Physics-Lab UI** - Oscilloscope-inspired dark theme
+## 🌌 THE VISION
+
+```
+They told us we couldn't do it.
+They said the frequencies were married forever.
+That the voice and the instrument were one.
+
+They were wrong.
+```
+
+**STEM SPLITTER** harnesses the raw power of neural networks — the same technology that powers the AI revolution — to perform what was once considered impossible: **true audio source separation**.
+
+Drop any song. Any format. Any quality.
+
+Watch it shatter into its component atoms.
+
+<br>
 
 ---
 
-## 🚀 Quick Start
+## ⚡ WHAT LIES WITHIN
 
-### Prerequisites
+<table>
+<tr>
+<td width="50%">
 
-- Python 3.9+
-- FFmpeg (for format conversion)
-- CUDA-capable GPU (optional, for faster processing)
+### 🎤 VOCAL EXTRACTION
+*The human voice — isolated, pure, untouched.*
 
-### Installation
+Every whisper. Every scream. Every breath between words.
 
-1. **Clone or download this project:**
-```bash
-cd demucs
+Lifted from the chaos like a phoenix from flame.
+
+</td>
+<td width="50%">
+
+### 🎶 INSTRUMENTAL ISOLATION  
+*Everything but the voice.*
+
+The beat. The melody. The sonic architecture.
+
+The fingerprint wiped clean.
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🥁 DRUM SEPARATION
+*The heartbeat of music.*
+
+Kicks that punch through walls.
+Snares that crack like lightning.
+Hi-hats whispering secrets.
+
+</td>
+<td width="50%">
+
+### 🎸 BASS EXTRACTION
+*The foundation of everything.*
+
+Frequencies so low they move through your chest.
+The groove. The pocket. The earth beneath your feet.
+
+</td>
+</tr>
+</table>
+
+<br>
+
+---
+
+## 🔥 THE POWER
+
+<br>
+
+<p align="center">
+  <strong>FOUR MODES OF OPERATION</strong>
+</p>
+
+```
+⚡ LIGHTNING     Fast. Brutal. Get it done.
+                 For when time is the enemy.
+
+◉  BALANCED      The default. The standard.
+                 For everyday alchemy.
+
+✦  PRISTINE      The finest. The purest.
+                 For when only perfection will do.
+
+❖  6-STEM        The ultimate separation.
+                 Vocals. Drums. Bass. Piano. Guitar. Other.
+                 Six streams from one river.
 ```
 
-2. **Create a virtual environment (recommended):**
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+<br>
+
+---
+
+## 📊 SPECIFICATIONS
+
+<br>
+
+### INPUT: EVERYTHING
+
+```
+MP3 · WAV · FLAC · OGG · M4A · AAC · OPUS · AIFF · WMA
+MKV · MP4 · WebM · MOV · AVI · AC3 · DTS · APE · WavPack
+...and more. If it makes sound, we accept it.
 ```
 
-3. **Install dependencies:**
+### OUTPUT: ANYTHING
+
+| FORMAT | OPTIONS |
+|--------|---------|
+| **WAV** | 16-bit · 24-bit · 32-bit · 32-bit Float |
+| **FLAC** | 16-bit · 24-bit |
+| **AIFF** | 16-bit · 24-bit |
+| **ALAC** | Apple Lossless |
+| **MP3** | 320 · 256 · 192 · 128 kbps + VBR |
+| **AAC** | 256 · 192 · 128 kbps |
+| **OGG** | Q10 · Q8 · Q6 · Q4 |
+| **OPUS** | 256 · 192 · 128 · 96 · 64 kbps |
+| **WMA** | 192 · 128 kbps |
+| **AC3** | 448 · 384 · 256 kbps |
+
+### SAMPLE RATES
+
+```
+44.1 kHz  ─────  CD Quality
+48.0 kHz  ─────  Professional
+96.0 kHz  ─────  Hi-Resolution
+192  kHz  ─────  Maximum Fidelity
+```
+
+<br>
+
+---
+
+## 🚀 IGNITION SEQUENCE
+
+<br>
+
 ```bash
+# Clone the laboratory
+git clone https://github.com/YOUR_USERNAME/stem-splitter.git
+cd stem-splitter
+
+# Initialize the reactor
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Install the components
 pip install -r requirements.txt
-```
 
-4. **Install FFmpeg** (if not already installed):
-```bash
-# macOS
-brew install ffmpeg
+# Verify FFmpeg is present
+ffmpeg -version
 
-# Ubuntu/Debian
-sudo apt install ffmpeg
-
-# Windows (using Chocolatey)
-choco install ffmpeg
-```
-
-### Running the Application
-
-```bash
+# LAUNCH
 python app.py
 ```
 
-Then open your browser to: **http://localhost:5000**
-
----
-
-## 🎛️ How It Works
-
-### The Demucs Engine
-
-This application uses **Demucs** (Deep Extractor for Music Sources), a deep learning model developed by Meta AI Research. It separates music into:
-
-| Stem | Description |
-|------|-------------|
-| 🎤 **Vocals** | Lead and background vocals |
-| 🥁 **Drums** | Percussion and drums |
-| 🎸 **Bass** | Bass guitar and low frequencies |
-| 🎹 **Other** | Everything else (synths, guitars, etc.) |
-
-The 6-stem model additionally separates:
-- 🎹 **Piano**
-- 🎸 **Guitar**
-
-### Processing Pipeline
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Upload    │ ──▶ │   Demucs    │ ──▶ │   Convert   │ ──▶ │  Download   │
-│   Audio     │     │   Separate  │     │   Format    │     │   Stems     │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
-```
-
----
-
-## 🎚️ Quality Modes Explained
-
-| Mode | Model | Speed | Quality | Use Case |
-|------|-------|-------|---------|----------|
-| ⚡ Lightning | htdemucs | Fast | Good | Quick previews |
-| ◉ Balanced | htdemucs | Medium | Great | General use |
-| ✦ Pristine | htdemucs_ft | Slow | Best | Final production |
-| ❖ 6-Stem | htdemucs_6s | Slow | Great | Detailed separation |
-
----
-
-## 📁 Supported Formats
-
-### Input
-MP3, WAV, FLAC, OGG, M4A, AAC, WMA, AIFF, OPUS
-
-### Output
-- **WAV** - Uncompressed, lossless
-- **FLAC** - Compressed, lossless
-- **MP3 320kbps** - High quality lossy
-- **MP3 256kbps** - Standard quality
-- **MP3 192kbps** - Smaller file size
-- **OGG Vorbis** - Open format lossy
-
----
-
-## 🖥️ System Requirements
-
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | 4 cores | 8+ cores |
-| RAM | 8 GB | 16+ GB |
-| GPU | None | NVIDIA CUDA or Apple Silicon |
-| Storage | 2 GB | 10+ GB (for temp files) |
-
-### Processing Times (Approximate)
-
-| Mode | CPU | GPU |
-|------|-----|-----|
-| Lightning | 2-3x realtime | 0.3x realtime |
-| Balanced | 3-4x realtime | 0.5x realtime |
-| Pristine | 5-6x realtime | 0.7x realtime |
-
-*A 4-minute song at 0.5x realtime = ~2 minutes processing*
-
----
-
-## 🔧 API Reference
-
-### GET `/api/info`
-Returns system information and available options.
-
-### POST `/api/separate`
-Main separation endpoint.
-
-**Form Data:**
-- `file`: Audio file (required)
-- `quality`: `lightning` | `balanced` | `pristine` | `6stem`
-- `format`: `wav` | `flac` | `mp3_320` | `mp3_256` | `mp3_192` | `ogg`
-- `stems`: `all` | `vocals` | `drums` | `bass` | `other`
-
-### GET `/api/download/<job_id>/<filename>`
-Download a separated stem file.
-
-### POST `/api/cleanup/<job_id>`
-Clean up temporary files after download.
-
----
-
-## 🆚 STEM SPLITTER vs LALAL.AI
-
-| Feature | STEM SPLITTER | LALAL.AI |
-|---------|---------------|----------|
-| Price | **FREE** / One-time | $30+/month |
-| Privacy | **Local processing** | Cloud upload |
-| Quality | State-of-the-art | State-of-the-art |
-| Speed | Depends on hardware | Fast (their servers) |
-| Offline | ✅ Yes | ❌ No |
-| Open Source | ✅ Yes | ❌ No |
-
----
-
-## 🎨 Credits
-
-- **Demucs** by Meta AI Research - [GitHub](https://github.com/facebookresearch/demucs)
-- **Flask** - Web framework
-- **FFmpeg** - Audio conversion
-- UI Design inspired by physics laboratories and recording studios
-
----
-
-## 📜 License
-
-MIT License - Use it, modify it, ship it! 🚀
-
----
+<br>
 
 <p align="center">
-  <strong>"For the underdog artist who deserves pristine samples"</strong>
-  <br>
-  Made with 💚 and way too much coffee
+  <strong>Navigate to <code>http://localhost:8080</code></strong>
 </p>
 
+<p align="center">
+  <em>The laboratory awaits.</em>
+</p>
+
+<br>
+
+---
+
+## 🖥️ SYSTEM REQUIREMENTS
+
+<br>
+
+| Component | Minimum | Recommended | Optimal |
+|-----------|---------|-------------|---------|
+| **CPU** | 4 cores | 8 cores | 12+ cores |
+| **RAM** | 8 GB | 16 GB | 32 GB |
+| **GPU** | — | NVIDIA CUDA | Apple Silicon |
+| **Storage** | 5 GB | 20 GB | SSD |
+
+<br>
+
+### ⚡ GPU ACCELERATION
+
+The system automatically detects and utilizes:
+
+- **NVIDIA CUDA** — Maximum performance on RTX/GTX
+- **Apple MPS** — Native Metal acceleration on M1/M2/M3
+- **CPU Fallback** — Works everywhere, just slower
+
+<br>
+
+---
+
+## 🎭 THE COMPETITION
+
+<br>
+
+<table>
+<tr>
+<th></th>
+<th>STEM SPLITTER</th>
+<th>LALAL.AI</th>
+<th>Others</th>
+</tr>
+<tr>
+<td><strong>Price</strong></td>
+<td>🟢 FREE</td>
+<td>🔴 $30+/month</td>
+<td>🔴 $$$/month</td>
+</tr>
+<tr>
+<td><strong>Privacy</strong></td>
+<td>🟢 100% Local</td>
+<td>🔴 Cloud Upload</td>
+<td>🔴 Cloud Upload</td>
+</tr>
+<tr>
+<td><strong>Offline</strong></td>
+<td>🟢 Yes</td>
+<td>🔴 No</td>
+<td>🔴 No</td>
+</tr>
+<tr>
+<td><strong>Open Source</strong></td>
+<td>🟢 Yes</td>
+<td>🔴 No</td>
+<td>🔴 No</td>
+</tr>
+<tr>
+<td><strong>Quality</strong></td>
+<td>🟢 State of Art</td>
+<td>🟢 State of Art</td>
+<td>🟡 Varies</td>
+</tr>
+<tr>
+<td><strong>Unlimited</strong></td>
+<td>🟢 Yes</td>
+<td>🔴 Credits</td>
+<td>🔴 Limits</td>
+</tr>
+</table>
+
+<br>
+
+---
+
+## 🧠 THE TECHNOLOGY
+
+<br>
+
+Built on **Demucs** — Meta AI Research's state-of-the-art audio source separation model.
+
+```
+Hybrid Transformer architecture
+Trained on 800+ hours of music
+4 specialized neural networks working in concert
+Real-time spectrogram analysis
+Waveform-level precision
+```
+
+This is not simple frequency filtering.
+This is not EQ manipulation.
+This is **deep learning** applied to the fundamental nature of sound.
+
+<br>
+
+---
+
+## 📜 PHILOSOPHY
+
+<br>
+
+<p align="center">
+  <em>
+  "Every voice is a dirty fingerprint —<br>
+  to be remembered, or wiped away."
+  </em>
+</p>
+
+<br>
+
+This tool was built for the **underdog artist**.
+
+The bedroom producer who can't afford $30/month.
+The DJ who needs that acapella at 3 AM.
+The musician who wants to learn from the masters.
+The creator who refuses to be paywalled.
+
+**Your music. Your stems. Your rules.**
+
+<br>
+
+---
+
+## 🎬 CREDITS
+
+<br>
+
+- **Demucs** — Meta AI Research ([GitHub](https://github.com/facebookresearch/demucs))
+- **Flask** — Web Framework
+- **FFmpeg** — Audio Conversion
+- **PyTorch** — Neural Network Engine
+- **You** — For believing in open source
+
+<br>
+
+---
+
+<br>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/LICENSE-MIT-00ff88?style=flat-square&labelColor=0a0b0f"/>
+</p>
+
+<p align="center">
+  <strong>Use it. Modify it. Ship it.</strong>
+</p>
+
+<p align="center">
+  <em>
+  "Time... is the one thing we don't have."<br>
+  — But with STEM SPLITTER, at least separation doesn't take forever.
+  </em>
+</p>
+
+<br>
+
+<p align="center">
+  Made with 💚 and questionable amounts of caffeine
+</p>
+
+<p align="center">
+  <sub>Now go split some atoms. I mean, audio.</sub>
+</p>
