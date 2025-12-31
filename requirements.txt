@@ -1,0 +1,22 @@
+# STEM SPLITTER - Audio Separation Engine
+# Powered by Demucs (Meta Research)
+
+# Core Framework
+flask==3.0.0
+flask-cors==4.0.0
+werkzeug==3.0.1
+
+# Audio Separation - The Magic
+demucs==4.0.1
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Audio Processing & Format Conversion
+pydub==0.25.1
+soundfile==0.12.1
+librosa==0.10.1
+
+# Utilities
+python-dotenv==1.0.0
+tqdm==4.66.1
+

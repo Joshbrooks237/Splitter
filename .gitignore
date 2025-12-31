@@ -1,0 +1,52 @@
+# STEM SPLITTER - Git Ignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+ENV/
+
+# Uploads & Outputs (user data)
+uploads/
+outputs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# PyTorch model cache (large files)
+*.pt
+*.pth
+*.ckpt
+
+# Environment
+.env
+.env.local
+
+# Test files
+test_audio/
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.m4a
+!static/*.mp3
+

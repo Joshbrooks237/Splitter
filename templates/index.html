@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STEM SPLITTER | Audio Alchemy Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Animated background grid -->
+    <div class="grid-bg"></div>
+    
+    <!-- Oscilloscope lines decoration -->
+    <svg class="oscilloscope-bg" viewBox="0 0 1000 200" preserveAspectRatio="none">
+        <path class="wave wave-1" d="M0,100 Q250,50 500,100 T1000,100" />
+        <path class="wave wave-2" d="M0,100 Q250,150 500,100 T1000,100" />
+        <path class="wave wave-3" d="M0,100 Q250,80 500,100 T1000,100" />
+    </svg>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="2"/>
+                        <path d="M30,50 L40,30 L50,60 L60,35 L70,50" fill="none" stroke="currentColor" stroke-width="3"/>
+                        <circle cx="50" cy="50" r="8" fill="currentColor"/>
+                    </svg>
+                </div>
+                <div class="logo-text">
+                    <h1>STEM SPLITTER</h1>
+                    <span class="tagline">Audio Alchemy Laboratory</span>
+                </div>
+            </div>
+            <div class="system-status">
+                <div class="status-indicator" id="deviceStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Detecting...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Drop Zone -->
+            <div class="drop-zone" id="dropZone">
+                <div class="drop-zone-content">
+                    <div class="drop-icon">
+                        <svg viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="8 4"/>
+                            <path d="M50,25 L50,60 M35,45 L50,60 L65,45" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                            <path d="M25,70 L75,70" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <h2>DROP YOUR AUDIO</h2>
+                    <p>or click to browse</p>
+                    <div class="format-tags">
+                        <span>MP3</span>
+                        <span>WAV</span>
+                        <span>FLAC</span>
+                        <span>OGG</span>
+                        <span>M4A</span>
+                        <span>OPUS</span>
+                        <span>AAC</span>
+                        <span>AIFF</span>
+                        <span>WMA</span>
+                        <span>MKV</span>
+                        <span>MP4</span>
+                        <span>WebM</span>
+                        <span class="format-etc">+ more</span>
+                    </div>
+                </div>
+                <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.m4a,.aac,.wma,.aiff,.opus,.ape,.wv,.mka,.mkv,.webm,.ac3,.dts,.alac,.mid,.midi" hidden>
+            </div>
+
+            <!-- File Info (shown after file selected) -->
+            <div class="file-info hidden" id="fileInfo">
+                <div class="file-visualization">
+                    <canvas id="waveformCanvas"></canvas>
+                </div>
+                <div class="file-details">
+                    <div class="file-icon">♫</div>
+                    <div class="file-meta">
+                        <span class="file-name" id="fileName">track.mp3</span>
+                        <span class="file-size" id="fileSize">4.2 MB</span>
+                    </div>
+                    <button class="btn-clear" id="clearFile">✕</button>
+                </div>
+            </div>
+
+            <!-- Control Panel -->
+            <div class="control-panel" id="controlPanel">
+                <h3 class="panel-title">
+                    <span class="panel-icon">⚙</span>
+                    SEPARATION PARAMETERS
+                </h3>
+                
+                <div class="controls-grid">
+                    <!-- Quality Selector -->
+                    <div class="control-group">
+                        <label class="control-label">PROCESSING QUALITY</label>
+                        <div class="radio-group" id="qualityGroup">
+                            <label class="radio-card">
+                                <input type="radio" name="quality" value="lightning" checked>
+                                <div class="radio-content">
+                                    <span class="radio-icon">⚡</span>
+                                    <span class="radio-title">Lightning</span>
+                                    <span class="radio-desc">Fast • Good</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="quality" value="balanced">
+                                <div class="radio-content">
+                                    <span class="radio-icon">◉</span>
+                                    <span class="radio-title">Balanced</span>
+                                    <span class="radio-desc">Default</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="quality" value="pristine">
+                                <div class="radio-content">
+                                    <span class="radio-icon">✦</span>
+                                    <span class="radio-title">Pristine</span>
+                                    <span class="radio-desc">Best Quality</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="quality" value="6stem">
+                                <div class="radio-content">
+                                    <span class="radio-icon">❖</span>
+                                    <span class="radio-title">6-Stem</span>
+                                    <span class="radio-desc">+Piano +Guitar</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Stem Selector -->
+                    <div class="control-group">
+                        <label class="control-label">EXTRACT STEMS</label>
+                        <p class="control-hint">Every voice is a fingerprint — lift it or wipe it away</p>
+                        <div class="radio-group stem-group" id="stemGroup">
+                            <label class="radio-card featured">
+                                <input type="radio" name="stems" value="vocals">
+                                <div class="radio-content">
+                                    <span class="radio-icon">🎤</span>
+                                    <span class="radio-title">Vocals Only</span>
+                                    <span class="radio-desc">Isolate the voice</span>
+                                </div>
+                            </label>
+                            <label class="radio-card featured">
+                                <input type="radio" name="stems" value="instrumental">
+                                <div class="radio-content">
+                                    <span class="radio-icon">🚫🎤</span>
+                                    <span class="radio-title">Instrumental</span>
+                                    <span class="radio-desc">Remove the voice</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="stems" value="all" checked>
+                                <div class="radio-content">
+                                    <span class="radio-icon">◎</span>
+                                    <span class="radio-title">All Stems</span>
+                                    <span class="radio-desc">Everything separate</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="stems" value="drums">
+                                <div class="radio-content">
+                                    <span class="radio-icon">🥁</span>
+                                    <span class="radio-title">Drums</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="stems" value="bass">
+                                <div class="radio-content">
+                                    <span class="radio-icon">🎸</span>
+                                    <span class="radio-title">Bass</span>
+                                </div>
+                            </label>
+                            <label class="radio-card">
+                                <input type="radio" name="stems" value="other">
+                                <div class="radio-content">
+                                    <span class="radio-icon">🎹</span>
+                                    <span class="radio-title">Other</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Output Format -->
+                    <div class="control-group">
+                        <label class="control-label">OUTPUT FORMAT & RESOLUTION</label>
+                        <div class="format-grid">
+                            <!-- Format Type Selector -->
+                            <div class="format-type-selector">
+                                <button type="button" class="format-type-btn active" data-type="lossless">Lossless</button>
+                                <button type="button" class="format-type-btn" data-type="mp3">MP3</button>
+                                <button type="button" class="format-type-btn" data-type="aac">AAC</button>
+                                <button type="button" class="format-type-btn" data-type="ogg">OGG</button>
+                                <button type="button" class="format-type-btn" data-type="opus">OPUS</button>
+                                <button type="button" class="format-type-btn" data-type="other">Other</button>
+                            </div>
+                            
+                            <!-- Sample Rate Selector -->
+                            <div class="sample-rate-selector">
+                                <label class="sr-label">SAMPLE RATE</label>
+                                <div class="sr-options">
+                                    <label class="sr-option">
+                                        <input type="radio" name="sampleRate" value="" checked>
+                                        <span>Original</span>
+                                    </label>
+                                    <label class="sr-option">
+                                        <input type="radio" name="sampleRate" value="44100">
+                                        <span>44.1 kHz</span>
+                                    </label>
+                                    <label class="sr-option">
+                                        <input type="radio" name="sampleRate" value="48000">
+                                        <span>48 kHz</span>
+                                    </label>
+                                    <label class="sr-option">
+                                        <input type="radio" name="sampleRate" value="96000">
+                                        <span>96 kHz</span>
+                                    </label>
+                                    <label class="sr-option hires">
+                                        <input type="radio" name="sampleRate" value="192000">
+                                        <span>192 kHz</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Format Options (dynamically shown) -->
+                            <div class="select-wrapper">
+                                <select id="formatSelect" class="format-select">
+                                    <!-- LOSSLESS -->
+                                    <optgroup label="═══ WAV (Uncompressed) ═══">
+                                        <option value="wav_16bit">WAV 16-bit (CD Quality)</option>
+                                        <option value="wav_24bit" selected>WAV 24-bit (Studio)</option>
+                                        <option value="wav_32bit">WAV 32-bit (Maximum)</option>
+                                        <option value="wav_32float">WAV 32-bit Float (Pro)</option>
+                                    </optgroup>
+                                    <optgroup label="═══ FLAC (Lossless Compressed) ═══">
+                                        <option value="flac_16bit">FLAC 16-bit</option>
+                                        <option value="flac_24bit">FLAC 24-bit</option>
+                                    </optgroup>
+                                    <optgroup label="═══ AIFF (Apple Lossless) ═══">
+                                        <option value="aiff_16bit">AIFF 16-bit</option>
+                                        <option value="aiff_24bit">AIFF 24-bit</option>
+                                    </optgroup>
+                                    <optgroup label="═══ ALAC ═══">
+                                        <option value="alac">ALAC (Apple Lossless)</option>
+                                    </optgroup>
+                                    
+                                    <!-- MP3 -->
+                                    <optgroup label="═══ MP3 (CBR) ═══">
+                                        <option value="mp3_320">MP3 320 kbps (Best)</option>
+                                        <option value="mp3_256">MP3 256 kbps</option>
+                                        <option value="mp3_192">MP3 192 kbps</option>
+                                        <option value="mp3_128">MP3 128 kbps</option>
+                                    </optgroup>
+                                    <optgroup label="═══ MP3 (VBR) ═══">
+                                        <option value="mp3_v0">MP3 V0 (VBR Best ~245kbps)</option>
+                                        <option value="mp3_v2">MP3 V2 (VBR High ~190kbps)</option>
+                                    </optgroup>
+                                    
+                                    <!-- AAC -->
+                                    <optgroup label="═══ AAC/M4A ═══">
+                                        <option value="aac_256">AAC 256 kbps</option>
+                                        <option value="aac_192">AAC 192 kbps</option>
+                                        <option value="aac_128">AAC 128 kbps</option>
+                                    </optgroup>
+                                    
+                                    <!-- OGG -->
+                                    <optgroup label="═══ OGG Vorbis ═══">
+                                        <option value="ogg_q10">OGG Q10 (~500kbps Best)</option>
+                                        <option value="ogg_q8">OGG Q8 (~256kbps)</option>
+                                        <option value="ogg_q6">OGG Q6 (~192kbps)</option>
+                                        <option value="ogg_q4">OGG Q4 (~128kbps)</option>
+                                    </optgroup>
+                                    
+                                    <!-- OPUS -->
+                                    <optgroup label="═══ OPUS (Modern) ═══">
+                                        <option value="opus_256">OPUS 256 kbps</option>
+                                        <option value="opus_192">OPUS 192 kbps</option>
+                                        <option value="opus_128">OPUS 128 kbps</option>
+                                        <option value="opus_96">OPUS 96 kbps</option>
+                                        <option value="opus_64">OPUS 64 kbps (Voice)</option>
+                                    </optgroup>
+                                    
+                                    <!-- OTHER -->
+                                    <optgroup label="═══ WMA ═══">
+                                        <option value="wma_192">WMA 192 kbps</option>
+                                        <option value="wma_128">WMA 128 kbps</option>
+                                    </optgroup>
+                                    <optgroup label="═══ AC3 (Dolby) ═══">
+                                        <option value="ac3_448">AC3 448 kbps (DVD)</option>
+                                        <option value="ac3_384">AC3 384 kbps</option>
+                                        <option value="ac3_256">AC3 256 kbps</option>
+                                    </optgroup>
+                                </select>
+                                <span class="select-arrow">▼</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Process Button -->
+                <button class="btn-process" id="processBtn" disabled>
+                    <span class="btn-text">INITIATE SEPARATION</span>
+                    <span class="btn-icon">→</span>
+                </button>
+            </div>
+
+            <!-- Processing State -->
+            <div class="processing-state hidden" id="processingState">
+                <div class="processing-animation">
+                    <div class="wave-container">
+                        <div class="processing-wave"></div>
+                        <div class="processing-wave"></div>
+                        <div class="processing-wave"></div>
+                        <div class="processing-wave"></div>
+                    </div>
+                </div>
+                <h3>SEPARATING AUDIO FREQUENCIES</h3>
+                <p class="processing-status" id="processingStatus">Initializing Demucs engine...</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="results hidden" id="results">
+                <h3 class="results-title">
+                    <span class="success-icon">✓</span>
+                    SEPARATION COMPLETE
+                </h3>
+                <div class="stems-grid" id="stemsGrid">
+                    <!-- Dynamically populated -->
+                </div>
+                <div class="results-actions">
+                    <button class="btn-download-all" id="downloadAllBtn">
+                        <span>↓</span> Download All Stems
+                    </button>
+                    <button class="btn-new" id="newSessionBtn">
+                        <span>+</span> New Session
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p>Powered by <strong>Demucs</strong> • Open Source Audio Separation</p>
+                <p class="footer-tagline">"Splitting atoms... I mean, audio frequencies"</p>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

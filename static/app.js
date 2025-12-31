@@ -1,0 +1,495 @@
+/**
+ * STEM SPLITTER - Audio Alchemy Laboratory
+ * Frontend JavaScript Controller
+ */
+
+class StemSplitter {
+    constructor() {
+        this.selectedFile = null;
+        this.jobId = null;
+        this.stemsData = null;
+        
+        this.init();
+    }
+    
+    init() {
+        this.cacheDOM();
+        this.bindEvents();
+        this.checkSystemStatus();
+    }
+    
+    cacheDOM() {
+        // Drop zone
+        this.dropZone = document.getElementById('dropZone');
+        this.fileInput = document.getElementById('fileInput');
+        
+        // File info
+        this.fileInfo = document.getElementById('fileInfo');
+        this.fileName = document.getElementById('fileName');
+        this.fileSize = document.getElementById('fileSize');
+        this.clearFile = document.getElementById('clearFile');
+        this.waveformCanvas = document.getElementById('waveformCanvas');
+        
+        // Controls
+        this.controlPanel = document.getElementById('controlPanel');
+        this.processBtn = document.getElementById('processBtn');
+        this.formatSelect = document.getElementById('formatSelect');
+        
+        // Processing state
+        this.processingState = document.getElementById('processingState');
+        this.processingStatus = document.getElementById('processingStatus');
+        this.progressFill = document.getElementById('progressFill');
+        
+        // Results
+        this.results = document.getElementById('results');
+        this.stemsGrid = document.getElementById('stemsGrid');
+        this.downloadAllBtn = document.getElementById('downloadAllBtn');
+        this.newSessionBtn = document.getElementById('newSessionBtn');
+        
+        // Status
+        this.deviceStatus = document.getElementById('deviceStatus');
+    }
+    
+    bindEvents() {
+        // Drag and drop
+        this.dropZone.addEventListener('click', () => this.fileInput.click());
+        this.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
+        this.dropZone.addEventListener('dragleave', (e) => this.handleDragLeave(e));
+        this.dropZone.addEventListener('drop', (e) => this.handleDrop(e));
+        
+        // File input
+        this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        
+        // Clear file
+        this.clearFile.addEventListener('click', () => this.resetToInitial());
+        
+        // Process button
+        this.processBtn.addEventListener('click', () => this.startProcessing());
+        
+        // Results actions
+        this.downloadAllBtn.addEventListener('click', () => this.downloadAllStems());
+        this.newSessionBtn.addEventListener('click', () => this.startNewSession());
+        
+        // Format type buttons (filter dropdown)
+        this.initFormatTypeButtons();
+    }
+    
+    initFormatTypeButtons() {
+        const buttons = document.querySelectorAll('.format-type-btn');
+        const select = document.getElementById('formatSelect');
+        
+        const formatGroups = {
+            'lossless': ['wav_', 'flac_', 'aiff_', 'alac'],
+            'mp3': ['mp3_'],
+            'aac': ['aac_'],
+            'ogg': ['ogg_'],
+            'opus': ['opus_'],
+            'other': ['wma_', 'ac3_']
+        };
+        
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active state
+                buttons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                const type = btn.dataset.type;
+                const prefixes = formatGroups[type];
+                
+                // Show/hide options and select first matching
+                let firstMatch = null;
+                Array.from(select.options).forEach(opt => {
+                    const matches = prefixes.some(p => opt.value.startsWith(p));
+                    opt.hidden = !matches;
+                    if (matches && !firstMatch) {
+                        firstMatch = opt.value;
+                    }
+                });
+                
+                // Show optgroups that have visible options
+                Array.from(select.querySelectorAll('optgroup')).forEach(group => {
+                    const hasVisible = Array.from(group.options).some(o => !o.hidden);
+                    group.hidden = !hasVisible;
+                });
+                
+                if (firstMatch) {
+                    select.value = firstMatch;
+                }
+            });
+        });
+    }
+    
+    async checkSystemStatus() {
+        try {
+            const response = await fetch('/api/info');
+            const data = await response.json();
+            
+            const statusDot = this.deviceStatus.querySelector('.status-dot');
+            const statusText = this.deviceStatus.querySelector('.status-text');
+            
+            statusDot.classList.add('active');
+            statusText.textContent = data.device.toUpperCase() + ' Ready';
+            
+            console.log('🎛️ System Status:', data);
+        } catch (error) {
+            console.error('Failed to fetch system info:', error);
+            const statusText = this.deviceStatus.querySelector('.status-text');
+            statusText.textContent = 'Offline';
+        }
+    }
+    
+    handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.dropZone.classList.add('dragover');
+    }
+    
+    handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.dropZone.classList.remove('dragover');
+    }
+    
+    handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.dropZone.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            this.selectFile(files[0]);
+        }
+    }
+    
+    handleFileSelect(e) {
+        const files = e.target.files;
+        if (files.length > 0) {
+            this.selectFile(files[0]);
+        }
+    }
+    
+    selectFile(file) {
+        // Accept virtually any audio/video format - FFmpeg will handle decoding
+        const validTypes = [
+            'audio/', 'video/',  // Any audio or video MIME type
+        ];
+        const validExtensions = [
+            // Lossless
+            'wav', 'flac', 'aiff', 'aif', 'alac', 'ape', 'wv', 'tta', 'dsd', 'dsf', 'dff',
+            // Lossy
+            'mp3', 'ogg', 'opus', 'm4a', 'aac', 'wma', 'mpc', 'mp2',
+            // Container formats
+            'webm', 'mka', 'mkv', 'mp4', 'mov', 'avi', 'wmv', 'flv',
+            // Professional/Broadcast
+            'ac3', 'eac3', 'dts', 'amr', 'gsm',
+            // Vintage/Specialty
+            'ra', 'ram', 'au', 'snd', 'voc', 'mid', 'midi',
+            // Raw
+            'raw', 'pcm'
+        ];
+        
+        const extension = file.name.split('.').pop().toLowerCase();
+        const isValidType = validTypes.some(type => file.type.startsWith(type));
+        const isValidExt = validExtensions.includes(extension);
+        
+        if (!isValidType && !isValidExt) {
+            this.showError('Unrecognized file type. Try anyway? Most audio formats are supported.');
+            // Still allow it - let FFmpeg try
+        }
+        
+        this.selectedFile = file;
+        this.showFileInfo();
+        this.drawWaveformPlaceholder();
+        this.processBtn.disabled = false;
+    }
+    
+    showFileInfo() {
+        this.dropZone.classList.add('hidden');
+        this.fileInfo.classList.remove('hidden');
+        
+        this.fileName.textContent = this.selectedFile.name;
+        this.fileSize.textContent = this.formatFileSize(this.selectedFile.size);
+    }
+    
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+    
+    drawWaveformPlaceholder() {
+        const canvas = this.waveformCanvas;
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        canvas.width = canvas.offsetWidth * 2;
+        canvas.height = canvas.offsetHeight * 2;
+        ctx.scale(2, 2);
+        
+        const width = canvas.offsetWidth;
+        const height = canvas.offsetHeight;
+        
+        // Clear
+        ctx.fillStyle = '#1a1d28';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Draw fake waveform
+        ctx.strokeStyle = '#00ff88';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
+        const centerY = height / 2;
+        const amplitude = height * 0.35;
+        
+        for (let x = 0; x < width; x++) {
+            const y = centerY + Math.sin(x * 0.05) * amplitude * Math.random();
+            if (x === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.stroke();
+        
+        // Add glow effect
+        ctx.shadowColor = '#00ff88';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+    }
+    
+    resetToInitial() {
+        this.selectedFile = null;
+        this.fileInfo.classList.add('hidden');
+        this.dropZone.classList.remove('hidden');
+        this.processBtn.disabled = true;
+        this.fileInput.value = '';
+    }
+    
+    getSelectedOptions() {
+        const quality = document.querySelector('input[name="quality"]:checked')?.value || 'balanced';
+        const stems = document.querySelector('input[name="stems"]:checked')?.value || 'all';
+        const format = this.formatSelect.value;
+        const sampleRate = document.querySelector('input[name="sampleRate"]:checked')?.value || '';
+        
+        return { quality, stems, format, sampleRate };
+    }
+    
+    async startProcessing() {
+        if (!this.selectedFile) return;
+        
+        const options = this.getSelectedOptions();
+        
+        // Show processing state
+        this.controlPanel.classList.add('hidden');
+        this.fileInfo.classList.add('hidden');
+        this.processingState.classList.remove('hidden');
+        
+        // Create form data
+        const formData = new FormData();
+        formData.append('file', this.selectedFile);
+        formData.append('quality', options.quality);
+        formData.append('format', options.format);
+        formData.append('stems', options.stems);
+        if (options.sampleRate) {
+            formData.append('sample_rate', options.sampleRate);
+        }
+        
+        // Simulate progress (since we can't track actual progress easily)
+        this.simulateProgress();
+        
+        try {
+            this.updateProcessingStatus('Uploading audio file...');
+            
+            const response = await fetch('/api/separate', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.error || 'Separation failed');
+            }
+            
+            this.jobId = result.job_id;
+            this.stemsData = result;
+            this.showResults();
+            
+        } catch (error) {
+            console.error('Processing error:', error);
+            this.showError(error.message);
+            this.resetUI();
+        }
+    }
+    
+    simulateProgress() {
+        let progress = 0;
+        const messages = [
+            'Initializing Demucs neural network...',
+            'Loading audio waveform...',
+            'Analyzing frequency spectrum...',
+            'Separating vocal frequencies...',
+            'Isolating drum patterns...',
+            'Extracting bass frequencies...',
+            'Processing harmonic content...',
+            'Finalizing stem separation...'
+        ];
+        
+        const interval = setInterval(() => {
+            progress += Math.random() * 15;
+            if (progress > 95) progress = 95;
+            
+            this.progressFill.style.width = progress + '%';
+            
+            const messageIndex = Math.min(
+                Math.floor(progress / 12),
+                messages.length - 1
+            );
+            this.updateProcessingStatus(messages[messageIndex]);
+            
+            if (progress >= 95) {
+                clearInterval(interval);
+            }
+        }, 800);
+        
+        this.progressInterval = interval;
+    }
+    
+    updateProcessingStatus(message) {
+        this.processingStatus.textContent = message;
+    }
+    
+    showResults() {
+        // Stop progress simulation
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+        }
+        
+        this.progressFill.style.width = '100%';
+        
+        setTimeout(() => {
+            this.processingState.classList.add('hidden');
+            this.results.classList.remove('hidden');
+            
+            this.renderStems();
+        }, 500);
+    }
+    
+    renderStems() {
+        const stemIcons = {
+            vocals: '🎤',
+            instrumental: '🎶',
+            drums: '🥁',
+            bass: '🎸',
+            other: '🎹',
+            piano: '🎹',
+            guitar: '🎸',
+            no_vocals: '🎶'
+        };
+        
+        this.stemsGrid.innerHTML = '';
+        
+        const { stems, download_urls } = this.stemsData;
+        const format = this.formatSelect.value.split('_')[0].toUpperCase();
+        
+        for (const [stemName, filePath] of Object.entries(stems)) {
+            const card = document.createElement('div');
+            card.className = 'stem-card';
+            card.innerHTML = `
+                <div class="stem-icon">${stemIcons[stemName] || '♫'}</div>
+                <div class="stem-name">${stemName}</div>
+                <div class="stem-format">${format}</div>
+                <a href="${download_urls[stemName]}" 
+                   class="stem-download" 
+                   download>
+                    ↓ Download
+                </a>
+            `;
+            
+            this.stemsGrid.appendChild(card);
+        }
+    }
+    
+    async downloadAllStems() {
+        if (!this.stemsData) return;
+        
+        const { download_urls } = this.stemsData;
+        
+        for (const [stemName, url] of Object.entries(download_urls)) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Small delay between downloads
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+    }
+    
+    async startNewSession() {
+        // Cleanup server-side files
+        if (this.jobId) {
+            try {
+                await fetch(`/api/cleanup/${this.jobId}`, { method: 'POST' });
+            } catch (e) {
+                console.warn('Cleanup failed:', e);
+            }
+        }
+        
+        this.resetUI();
+    }
+    
+    resetUI() {
+        this.selectedFile = null;
+        this.jobId = null;
+        this.stemsData = null;
+        
+        this.results.classList.add('hidden');
+        this.processingState.classList.add('hidden');
+        this.fileInfo.classList.add('hidden');
+        this.dropZone.classList.remove('hidden');
+        this.controlPanel.classList.remove('hidden');
+        
+        this.progressFill.style.width = '0%';
+        this.processBtn.disabled = true;
+        this.fileInput.value = '';
+    }
+    
+    showError(message) {
+        // Create error toast
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff4757;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            z-index: 1000;
+            animation: fadeInUp 0.3s ease;
+        `;
+        toast.textContent = '⚠️ ' + message;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 5000);
+    }
+}
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', () => {
+    window.stemSplitter = new StemSplitter();
+    console.log('🎵 STEM SPLITTER initialized');
+    console.log('   "Splitting atoms... I mean, audio frequencies"');
+});
+
