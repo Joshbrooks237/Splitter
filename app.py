@@ -30,6 +30,9 @@ from licensing import (
     FREE_TRIAL_SONGS, PRODUCT_PRICE_USD
 )
 
+# Import async worker
+from worker import Job, start_job, get_job
+
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "stem-splitter-dev-key-change-in-prod")
 
@@ -365,7 +368,7 @@ def info():
 @require_processing_rights
 def separate():
     """
-    Main separation endpoint.
+    ASYNC separation endpoint - returns immediately, poll /api/job/<id> for status.
     
     Accepts:
         - audio file (multipart form)
@@ -373,7 +376,8 @@ def separate():
         - format: wav | mp3_320 | mp3_256 | mp3_192 | flac | ogg
         - stems: vocals | drums | bass | other | all
     
-    Requires: Trial songs remaining OR valid license
+    Returns:
+        - job_id: Poll /api/job/<job_id> for status
     """
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
@@ -402,8 +406,9 @@ def separate():
     if sample_rate and sample_rate not in SAMPLE_RATES:
         return jsonify({"error": f"Invalid sample rate. Options: {', '.join(SAMPLE_RATES.keys())}"}), 400
     
-    # Convert sample rate to int if provided
-    sample_rate_hz = SAMPLE_RATES.get(sample_rate) if sample_rate else None
+    # Validate options
+    if quality not in MODELS:
+        return jsonify({"error": f"Invalid quality. Options: {', '.join(MODELS.keys())}"}), 400
     
     # Create unique job ID
     job_id = str(uuid.uuid4())[:8]
@@ -413,104 +418,72 @@ def separate():
     input_path = UPLOAD_FOLDER / f"{job_id}_{filename}"
     file.save(input_path)
     
-    try:
-        # Run separation
-        job_output_dir = OUTPUT_FOLDER / job_id
-        model = MODELS[quality]
-        
-        stems_filter = None if requested_stems == "all" else [requested_stems]
-        
-        run_demucs(input_path, job_output_dir, model=model, stems=stems_filter)
-        
-        # Find the separated stems
-        stem_name = input_path.stem.replace(f"{job_id}_", "")
-        stems_dir = job_output_dir / model / stem_name
-        
-        if not stems_dir.exists():
-            # Try finding any subdirectory
-            for subdir in (job_output_dir / model).iterdir():
-                if subdir.is_dir():
-                    stems_dir = subdir
-                    break
-        
-        # Convert to requested format if needed
-        format_config = OUTPUT_FORMATS[output_format]
-        result_files = {}
-        
-        for stem_file in stems_dir.glob("*.wav"):
-            stem_name = stem_file.stem
-            
-            # Handle instrumental request - we want "no_vocals" renamed to "instrumental"
-            if requested_stems == "instrumental":
-                if stem_name == "no_vocals":
-                    stem_name = "instrumental"  # Rename for clarity
-                elif stem_name == "vocals":
-                    continue  # Skip vocals when instrumental requested
-                else:
-                    continue
-            elif requested_stems != "all" and stem_name != requested_stems:
-                # For "no_vocals" stem, skip it unless specifically requesting instrumental
-                if stem_name == "no_vocals":
-                    continue
-                continue
-            
-            # Skip "no_vocals" in "all" mode - user probably wants labeled stems
-            if requested_stems == "all" and stem_name == "no_vocals":
-                continue
-            
-            # Always convert if sample rate specified, or if format != wav
-            if format_config["ext"] == "wav" and not sample_rate_hz:
-                result_files[stem_name] = str(stem_file)
-            else:
-                output_path = stem_file.with_suffix(f".{format_config['ext']}")
-                convert_audio_format(stem_file, output_path, format_config, sample_rate_hz)
-                result_files[stem_name] = str(output_path)
-        
-        # Increment usage counter
-        device = request.device
-        device.songs_processed += 1
-        if device.license:
-            device.license.total_songs_processed += 1
-        db.session.commit()
-        
-        # Build download URLs with full path for Railway
-        download_urls = {}
-        for name, path in result_files.items():
-            stem_filename = Path(path).name
-            download_urls[name] = f"/api/download/{job_id}/{stem_filename}"
-        
-        print(f"✅ Job {job_id} complete. Files: {list(result_files.keys())}")
-        print(f"   Download URLs: {download_urls}")
-        
-        return jsonify({
-            "job_id": job_id,
-            "status": "complete",
-            "stems": result_files,
-            "download_urls": download_urls,
-            # Include updated license info
-            "license": {
-                "is_trial": device.is_trial,
-                "songs_processed": device.songs_processed,
-                "songs_remaining": device.songs_remaining if device.is_trial else "unlimited",
-            }
-        })
-        
-    except subprocess.TimeoutExpired:
-        print(f"❌ Job {job_id} timed out")
-        return jsonify({"error": "Processing timed out. Try a shorter audio file."}), 500
+    # Create output directory
+    job_output_dir = OUTPUT_FOLDER / job_id
+    job_output_dir.mkdir(parents=True, exist_ok=True)
     
-    except Exception as e:
-        print(f"❌ Job {job_id} failed: {str(e)}")
-        print(traceback.format_exc())
-        return jsonify({"error": str(e)}), 500
+    # Prepare job options
+    model = MODELS[quality]
+    stems_filter = None if requested_stems == "all" else [requested_stems]
     
-    finally:
-        # Cleanup input file
-        try:
-            if input_path.exists():
-                input_path.unlink()
-        except Exception as e:
-            print(f"⚠️ Failed to cleanup input file: {e}")
+    job_options = {
+        "model": model,
+        "stems_filter": stems_filter,
+        "output_format": output_format,
+        "sample_rate": sample_rate,
+        "requested_stems": requested_stems,
+    }
+    
+    # Create and start async job
+    job = Job(
+        job_id=job_id,
+        input_path=str(input_path),
+        output_dir=str(job_output_dir),
+        options=job_options
+    )
+    
+    # Increment usage counter now (optimistic)
+    device = request.device
+    device.songs_processed += 1
+    if device.license:
+        device.license.total_songs_processed += 1
+    db.session.commit()
+    
+    # Start background processing
+    start_job(job, run_demucs, convert_audio_format, OUTPUT_FORMATS, SAMPLE_RATES)
+    
+    print(f"🚀 Job {job_id} started in background")
+    
+    # Return immediately with job ID
+    return jsonify({
+        "job_id": job_id,
+        "status": "processing",
+        "message": "Processing started. Poll /api/job/{job_id} for status.",
+        "poll_url": f"/api/job/{job_id}",
+        "license": {
+            "is_trial": device.is_trial,
+            "songs_processed": device.songs_processed,
+            "songs_remaining": device.songs_remaining if device.is_trial else "unlimited",
+        }
+    })
+
+
+@app.route("/api/job/<job_id>")
+def job_status(job_id):
+    """Get status of a processing job."""
+    job = get_job(job_id)
+    
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+    
+    response = job.to_dict()
+    
+    # Add download URLs if complete
+    if job.status == "complete" and job.result:
+        response["stems"] = job.result.get("stems", {})
+        response["download_urls"] = job.result.get("download_urls", {})
+    
+    return jsonify(response)
 
 
 @app.route("/api/download/<job_id>/<filename>")

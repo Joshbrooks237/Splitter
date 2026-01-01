@@ -457,48 +457,37 @@ class StemSplitter {
         try {
             this.updateProcessingStatus('Uploading audio file...');
             
-            // Set a longer timeout for cloud processing
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min timeout
-            
+            // Step 1: Upload and start processing
             const response = await fetch('/api/separate', {
                 method: 'POST',
-                body: formData,
-                signal: controller.signal
+                body: formData
             });
-            
-            clearTimeout(timeoutId);
             
             const result = await response.json();
             
             if (!response.ok) {
-                // Check if trial expired
                 if (response.status === 402 && result.trial_expired) {
                     this.showUpgradeModal();
                     throw new Error('Trial expired - upgrade to continue');
                 }
-                throw new Error(result.error || 'Separation failed');
+                throw new Error(result.error || 'Failed to start processing');
             }
             
             this.jobId = result.job_id;
-            this.stemsData = result;
+            console.log('🚀 Job started:', result.job_id);
             
-            console.log('🎵 Processing complete:', result);
-            
-            // Verify files exist before showing results
-            try {
-                const debugResp = await fetch(`/api/debug/job/${result.job_id}`);
-                const debugData = await debugResp.json();
-                console.log('📁 Files on server:', debugData);
-            } catch (e) {
-                console.warn('Could not verify files:', e);
-            }
-            
-            // Update license info after processing
+            // Update license info
             if (result.license) {
                 this.licenseInfo = result.license;
                 this.updateLicenseUI();
             }
+            
+            // Step 2: Poll for completion
+            this.updateProcessingStatus('Processing audio (this may take a few minutes)...');
+            const finalResult = await this.pollJobStatus(result.job_id);
+            
+            this.stemsData = finalResult;
+            console.log('🎵 Processing complete:', finalResult);
             
             this.showResults();
             
@@ -507,6 +496,52 @@ class StemSplitter {
             this.showError(error.message);
             this.resetUI();
         }
+    }
+    
+    async pollJobStatus(jobId) {
+        const maxAttempts = 300; // 5 minutes at 1 second intervals
+        let attempts = 0;
+        
+        while (attempts < maxAttempts) {
+            attempts++;
+            
+            try {
+                const response = await fetch(`/api/job/${jobId}`);
+                const job = await response.json();
+                
+                console.log(`📊 Job ${jobId} status: ${job.status} (${job.progress}%)`);
+                
+                // Update progress
+                if (job.progress) {
+                    this.progressFill.style.width = Math.min(job.progress, 95) + '%';
+                }
+                if (job.message) {
+                    this.updateProcessingStatus(job.message);
+                }
+                
+                if (job.status === 'complete') {
+                    this.progressFill.style.width = '100%';
+                    return job;
+                }
+                
+                if (job.status === 'failed') {
+                    throw new Error(job.error || 'Processing failed');
+                }
+                
+                // Wait 1 second before polling again
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+            } catch (error) {
+                console.error('Polling error:', error);
+                // Don't throw immediately - might be a network glitch
+                if (attempts > 5) {
+                    throw error;
+                }
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
+        }
+        
+        throw new Error('Processing timed out. Please try again.');
     }
     
     simulateProgress() {
