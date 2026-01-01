@@ -457,10 +457,17 @@ class StemSplitter {
         try {
             this.updateProcessingStatus('Uploading audio file...');
             
+            // Set a longer timeout for cloud processing
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 min timeout
+            
             const response = await fetch('/api/separate', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             const result = await response.json();
             
@@ -501,7 +508,10 @@ class StemSplitter {
             'Isolating drum patterns...',
             'Extracting bass frequencies...',
             'Processing harmonic content...',
-            'Finalizing stem separation...'
+            'Finalizing stem separation...',
+            'This may take a few minutes...',
+            'Still working on it...',
+            'Almost there...'
         ];
         
         const interval = setInterval(() => {

@@ -221,13 +221,32 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     """
     device = get_device()
     
+    # Check if we're in a low-memory environment (Railway, etc.)
+    # Use memory-efficient settings
+    is_cloud = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("PORT")
+    
     # Use sys.executable to ensure we use the same Python as Flask
     cmd = [
         sys.executable, "-m", "demucs",
         "--out", str(output_dir),
-        "--name", model,
         "-d", device,
     ]
+    
+    # Memory optimization for cloud environments
+    if is_cloud:
+        cmd.extend([
+            "--segment", "7",      # Smaller segments = less RAM (default is ~40)
+            "--overlap", "0.1",    # Less overlap = less RAM
+            "--jobs", "1",         # Single job = less RAM
+        ])
+        print("☁️ Cloud mode: Using memory-efficient settings")
+    
+    # Model selection - use lighter model in cloud if needed
+    if is_cloud and model in ["htdemucs_ft", "htdemucs_6s"]:
+        print(f"⚠️ Downgrading {model} to htdemucs for cloud compatibility")
+        model = "htdemucs"
+    
+    cmd.extend(["--name", model])
     
     # Add two-stem mode for specific extractions
     # This creates "vocals" and "no_vocals" (instrumental) stems
@@ -241,34 +260,51 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     
     cmd.append(str(input_path))
     
-    print(f"🎛️ Running Demucs: {' '.join(cmd)}")
-    print(f"   Input: {input_path}")
+    print(f"🎛️ Running Demucs:")
+    print(f"   Command: {' '.join(cmd)}")
+    print(f"   Input: {input_path} ({input_path.stat().st_size / 1024 / 1024:.1f} MB)")
     print(f"   Output: {output_dir}")
     print(f"   Device: {device}")
+    print(f"   Model: {model}")
     
     # Set environment for better compatibility
     env = os.environ.copy()
     env['PYTHONUNBUFFERED'] = '1'
+    env['OMP_NUM_THREADS'] = '1'  # Limit CPU threads to save memory
+    env['MKL_NUM_THREADS'] = '1'
     
-    result = subprocess.run(
-        cmd, 
-        capture_output=True, 
-        text=True,
-        env=env,
-        timeout=1800  # 30 minute timeout
-    )
-    
-    print(f"   Return code: {result.returncode}")
-    if result.stdout:
-        print(f"   Stdout: {result.stdout[:500]}")
-    if result.stderr:
-        print(f"   Stderr: {result.stderr[:500]}")
-    
-    if result.returncode != 0:
-        error_msg = result.stderr or result.stdout or "Unknown error"
-        raise Exception(f"Demucs failed (code {result.returncode}): {error_msg[:300]}")
-    
-    return output_dir
+    try:
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True,
+            env=env,
+            timeout=1800  # 30 minute timeout
+        )
+        
+        print(f"   Return code: {result.returncode}")
+        if result.stdout:
+            print(f"   Stdout (last 500 chars): ...{result.stdout[-500:]}")
+        if result.stderr:
+            print(f"   Stderr (last 500 chars): ...{result.stderr[-500:]}")
+        
+        if result.returncode != 0:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            
+            # Check for common errors
+            if "out of memory" in error_msg.lower() or "oom" in error_msg.lower():
+                raise Exception("Out of memory. Try a shorter audio file (under 3 minutes) or use Lightning mode.")
+            elif "killed" in error_msg.lower():
+                raise Exception("Process killed (likely out of memory). Try a shorter audio file.")
+            else:
+                raise Exception(f"Separation failed: {error_msg[:200]}")
+        
+        return output_dir
+        
+    except subprocess.TimeoutExpired:
+        raise Exception("Processing timed out. Try a shorter audio file.")
+    except MemoryError:
+        raise Exception("Out of memory. Try a shorter audio file (under 3 minutes).")
 
 
 @app.route("/")
@@ -535,20 +571,34 @@ def debug_job(job_id):
 def health_check():
     """Health check endpoint with system diagnostics."""
     import shutil as sh
+    import psutil
+    
+    is_cloud = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("PORT")
     
     diagnostics = {
         "status": "ok",
-        "python_version": sys.version,
+        "environment": "cloud" if is_cloud else "local",
+        "python_version": sys.version.split()[0],
         "python_executable": sys.executable,
         "device": get_device(),
         "torch_version": torch.__version__,
         "cuda_available": torch.cuda.is_available(),
         "base_dir": str(BASE_DIR),
-        "upload_folder": str(UPLOAD_FOLDER),
         "upload_folder_exists": UPLOAD_FOLDER.exists(),
-        "output_folder": str(OUTPUT_FOLDER),
         "output_folder_exists": OUTPUT_FOLDER.exists(),
     }
+    
+    # Memory info
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        diagnostics["memory_total_gb"] = round(mem.total / (1024**3), 2)
+        diagnostics["memory_available_gb"] = round(mem.available / (1024**3), 2)
+        diagnostics["memory_percent_used"] = mem.percent
+    except ImportError:
+        diagnostics["memory_info"] = "psutil not installed"
+    except Exception as e:
+        diagnostics["memory_error"] = str(e)
     
     # Check if demucs is installed
     try:
@@ -575,7 +625,7 @@ def health_check():
         )
         diagnostics["ffmpeg_installed"] = result.returncode == 0
         if result.returncode == 0:
-            diagnostics["ffmpeg_version"] = result.stdout.split('\n')[0]
+            diagnostics["ffmpeg_version"] = result.stdout.split('\n')[0][:50]
     except Exception as e:
         diagnostics["ffmpeg_installed"] = False
         diagnostics["ffmpeg_error"] = str(e)
@@ -584,8 +634,13 @@ def health_check():
     try:
         total, used, free = sh.disk_usage("/")
         diagnostics["disk_free_gb"] = round(free / (1024**3), 2)
+        diagnostics["disk_total_gb"] = round(total / (1024**3), 2)
     except:
         pass
+    
+    # Recommendations
+    if diagnostics.get("memory_available_gb", 0) < 4:
+        diagnostics["warning"] = "Low memory. Use short audio files (under 3 min) and Lightning mode."
     
     return jsonify(diagnostics)
 
