@@ -483,6 +483,17 @@ class StemSplitter {
             this.jobId = result.job_id;
             this.stemsData = result;
             
+            console.log('🎵 Processing complete:', result);
+            
+            // Verify files exist before showing results
+            try {
+                const debugResp = await fetch(`/api/debug/job/${result.job_id}`);
+                const debugData = await debugResp.json();
+                console.log('📁 Files on server:', debugData);
+            } catch (e) {
+                console.warn('Could not verify files:', e);
+            }
+            
             // Update license info after processing
             if (result.license) {
                 this.licenseInfo = result.license;
@@ -596,18 +607,48 @@ class StemSplitter {
     }
     
     async downloadStem(url, stemName) {
+        const btn = document.querySelector(`[data-name="${stemName}"]`);
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ Loading...';
+        }
+        
         try {
             console.log(`📥 Downloading ${stemName} from ${url}`);
             
-            const response = await fetch(url);
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/octet-stream, audio/*, */*'
+                }
+            });
+            
+            console.log(`📥 Response status: ${response.status}`);
+            console.log(`📥 Content-Type: ${response.headers.get('Content-Type')}`);
+            console.log(`📥 Content-Length: ${response.headers.get('Content-Length')}`);
             
             if (!response.ok) {
-                const error = await response.json().catch(() => ({ error: 'Download failed' }));
-                throw new Error(error.error || `HTTP ${response.status}`);
+                // Try to get error message
+                const text = await response.text();
+                let errorMsg;
+                try {
+                    const json = JSON.parse(text);
+                    errorMsg = json.error || json.message || `HTTP ${response.status}`;
+                    console.error('Server error:', json);
+                } catch {
+                    errorMsg = text.substring(0, 100) || `HTTP ${response.status}`;
+                }
+                throw new Error(errorMsg);
             }
             
             // Get the blob
+            if (btn) btn.textContent = '⏳ Receiving...';
             const blob = await response.blob();
+            console.log(`📥 Received blob: ${blob.size} bytes, type: ${blob.type}`);
+            
+            if (blob.size === 0) {
+                throw new Error('Received empty file');
+            }
             
             // Get filename from Content-Disposition header or use default
             const contentDisposition = response.headers.get('Content-Disposition');
@@ -627,11 +668,19 @@ class StemSplitter {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(downloadUrl);
             
-            console.log(`✅ Downloaded ${stemName}`);
+            console.log(`✅ Downloaded ${stemName}: ${filename}`);
+            if (btn) {
+                btn.textContent = '✓ Downloaded';
+                btn.disabled = false;
+            }
             
         } catch (error) {
             console.error(`❌ Download error for ${stemName}:`, error);
             this.showError(`Failed to download ${stemName}: ${error.message}`);
+            if (btn) {
+                btn.textContent = '↓ Retry';
+                btn.disabled = false;
+            }
         }
     }
     

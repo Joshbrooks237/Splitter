@@ -492,48 +492,91 @@ def separate():
 
 @app.route("/api/download/<job_id>/<filename>")
 def download(job_id, filename):
-    """Download a separated stem file."""
+    """Download a separated stem file with streaming support."""
+    from flask import Response
     import mimetypes
     
-    # Security: sanitize inputs
-    job_id = secure_filename(job_id)
-    filename = secure_filename(filename)
+    print(f"📥 Download request: job={job_id}, file={filename}")
+    
+    # Light sanitization - don't use secure_filename on the full path
+    # as it might break valid filenames with special chars
+    job_id = job_id.replace("..", "").replace("/", "")
+    filename = filename.replace("..", "").replace("/", "")
     
     job_dir = OUTPUT_FOLDER / job_id
     
+    print(f"   Looking in: {job_dir}")
+    print(f"   Job dir exists: {job_dir.exists()}")
+    
     if not job_dir.exists():
-        return jsonify({"error": "Job not found"}), 404
+        print(f"   ❌ Job directory not found")
+        return jsonify({"error": "Job not found", "path": str(job_dir)}), 404
     
     # Find the file in the job directory
+    file_path = None
     try:
         for model_dir in job_dir.iterdir():
             if model_dir.is_dir():
                 for stem_dir in model_dir.iterdir():
                     if stem_dir.is_dir():
-                        file_path = stem_dir / filename
-                        if file_path.exists():
-                            # Get MIME type
-                            mime_type, _ = mimetypes.guess_type(str(file_path))
-                            if mime_type is None:
-                                mime_type = 'application/octet-stream'
-                            
-                            # Send file with absolute path and proper headers
-                            response = send_file(
-                                str(file_path.resolve()),
-                                mimetype=mime_type,
-                                as_attachment=True,
-                                download_name=filename
-                            )
-                            
-                            # Add CORS headers explicitly
-                            response.headers['Access-Control-Allow-Origin'] = '*'
-                            response.headers['Access-Control-Expose-Headers'] = 'Content-Disposition'
-                            
-                            return response
+                        candidate = stem_dir / filename
+                        print(f"   Checking: {candidate} exists={candidate.exists()}")
+                        if candidate.exists():
+                            file_path = candidate
+                            break
+                if file_path:
+                    break
     except Exception as e:
-        return jsonify({"error": f"Download error: {str(e)}"}), 500
+        print(f"   ❌ Error searching: {e}")
+        return jsonify({"error": f"Search error: {str(e)}"}), 500
     
-    return jsonify({"error": "File not found"}), 404
+    if not file_path or not file_path.exists():
+        # List what files DO exist for debugging
+        existing_files = []
+        try:
+            for root, dirs, files in os.walk(job_dir):
+                for f in files:
+                    existing_files.append(os.path.join(root, f))
+        except:
+            pass
+        print(f"   ❌ File not found. Existing files: {existing_files}")
+        return jsonify({
+            "error": "File not found",
+            "requested": filename,
+            "existing_files": existing_files[:10]  # First 10
+        }), 404
+    
+    # Get file info
+    file_size = file_path.stat().st_size
+    mime_type, _ = mimetypes.guess_type(str(file_path))
+    if mime_type is None:
+        mime_type = 'application/octet-stream'
+    
+    print(f"   ✅ Found: {file_path} ({file_size / 1024 / 1024:.1f} MB, {mime_type})")
+    
+    # For large files, use streaming response
+    def generate():
+        with open(file_path, 'rb') as f:
+            while True:
+                chunk = f.read(1024 * 1024)  # 1MB chunks
+                if not chunk:
+                    break
+                yield chunk
+    
+    response = Response(
+        generate(),
+        mimetype=mime_type,
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Content-Length': str(file_size),
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Expose-Headers': 'Content-Disposition, Content-Length',
+            'Cache-Control': 'no-cache',
+        }
+    )
+    
+    print(f"   📤 Sending response...")
+    return response
 
 
 @app.route("/api/cleanup/<job_id>", methods=["POST"])
