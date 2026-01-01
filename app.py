@@ -284,8 +284,10 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
             "--segment", "7",      # Smaller segments = less RAM (default is ~40)
             "--overlap", "0.1",    # Less overlap = less RAM
             "--jobs", "1",         # Single job = less RAM
+            "--mp3",               # Use MP3 output (lameenc) to bypass torchaudio.save() bug
+            "--mp3-bitrate", "320", # High quality MP3
         ])
-        print("☁️ Cloud mode: Using memory-efficient settings")
+        print("☁️ Cloud mode: Using memory-efficient settings + MP3 output")
     
     cmd.extend(["--name", model])
     

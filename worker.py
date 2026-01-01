@@ -86,7 +86,10 @@ def process_job(job, run_demucs_func, convert_func, output_formats, sample_rates
         
         result_files = {}
         
-        for stem_file in stems_dir.glob("*.wav"):
+        # Look for MP3 files (cloud mode uses --mp3) or WAV files (local mode)
+        stem_files = list(stems_dir.glob("*.mp3")) or list(stems_dir.glob("*.wav"))
+        
+        for stem_file in stem_files:
             stem_name = stem_file.stem
             
             # Handle instrumental request
@@ -105,13 +108,10 @@ def process_job(job, run_demucs_func, convert_func, output_formats, sample_rates
             if requested_stems == "all" and stem_name == "no_vocals":
                 continue
             
-            # Convert if needed
-            if format_config.get("ext") == "wav" and not sample_rate_hz:
-                result_files[stem_name] = str(stem_file)
-            else:
-                output_path = stem_file.with_suffix(f".{format_config['ext']}")
-                convert_func(stem_file, output_path, format_config, sample_rate_hz)
-                result_files[stem_name] = str(output_path)
+            # Always convert to desired format (source is MP3 in cloud mode)
+            output_path = stem_file.parent / f"{stem_name}.{format_config['ext']}"
+            convert_func(stem_file, output_path, format_config, sample_rate_hz)
+            result_files[stem_name] = str(output_path)
         
         job.progress = 100
         job.status = "complete"
