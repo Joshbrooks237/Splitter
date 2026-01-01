@@ -206,6 +206,26 @@ def convert_audio_format(input_path, output_path, format_config, sample_rate=Non
     subprocess.run(cmd, capture_output=True, check=True)
 
 
+def ensure_model_downloaded(model="htdemucs"):
+    """Pre-download the Demucs model to avoid timeout during separation."""
+    print(f"🔄 Ensuring model {model} is downloaded...")
+    
+    try:
+        # Import demucs and trigger model download
+        from demucs.pretrained import get_model
+        from demucs.apply import BagOfModels
+        import torch
+        
+        # This will download the model if not cached
+        models = get_model(model)
+        print(f"✅ Model {model} ready")
+        return True
+    except Exception as e:
+        print(f"⚠️ Model pre-download failed: {e}")
+        # Continue anyway - demucs CLI will try to download
+        return False
+
+
 def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     """
     Run Demucs separation on an audio file.
@@ -225,6 +245,14 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     # Use memory-efficient settings
     is_cloud = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("PORT")
     
+    # Model selection - use lighter model in cloud if needed
+    if is_cloud and model in ["htdemucs_ft", "htdemucs_6s"]:
+        print(f"⚠️ Downgrading {model} to htdemucs for cloud compatibility")
+        model = "htdemucs"
+    
+    # Pre-download model to avoid timeout during separation
+    ensure_model_downloaded(model)
+    
     # Use sys.executable to ensure we use the same Python as Flask
     cmd = [
         sys.executable, "-m", "demucs",
@@ -240,11 +268,6 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
             "--jobs", "1",         # Single job = less RAM
         ])
         print("☁️ Cloud mode: Using memory-efficient settings")
-    
-    # Model selection - use lighter model in cloud if needed
-    if is_cloud and model in ["htdemucs_ft", "htdemucs_6s"]:
-        print(f"⚠️ Downgrading {model} to htdemucs for cloud compatibility")
-        model = "htdemucs"
     
     cmd.extend(["--name", model])
     
@@ -610,6 +633,20 @@ def debug_job(job_id):
     })
 
 
+@app.route("/api/preload-model")
+def preload_model_endpoint():
+    """Manually trigger model download."""
+    model = request.args.get("model", "htdemucs")
+    
+    try:
+        from demucs.pretrained import get_model
+        print(f"🔄 Downloading model: {model}")
+        get_model(model)
+        return jsonify({"success": True, "model": model, "message": "Model downloaded successfully"})
+    except Exception as e:
+        return jsonify({"success": False, "model": model, "error": str(e)}), 500
+
+
 @app.route("/api/health")
 def health_check():
     """Health check endpoint with system diagnostics."""
@@ -657,6 +694,24 @@ def health_check():
     except Exception as e:
         diagnostics["demucs_installed"] = False
         diagnostics["demucs_error"] = str(e)
+    
+    # Check if model is cached
+    try:
+        from demucs.pretrained import SOURCES
+        import torch
+        model_dir = torch.hub.get_dir()
+        diagnostics["model_cache_dir"] = model_dir
+        
+        # Check for htdemucs
+        htdemucs_path = Path(model_dir) / "checkpoints" / "demucs"
+        if htdemucs_path.exists():
+            cached_models = list(htdemucs_path.glob("*.th"))
+            diagnostics["cached_models"] = [m.name for m in cached_models]
+        else:
+            diagnostics["cached_models"] = []
+            diagnostics["model_warning"] = "No models cached. First separation will download ~80MB model."
+    except Exception as e:
+        diagnostics["model_cache_error"] = str(e)
     
     # Check if ffmpeg is installed
     try:
@@ -831,6 +886,24 @@ def license_status():
     })
 
 
+def preload_models():
+    """Pre-download models on startup to avoid timeout during requests."""
+    print("🔄 Pre-loading Demucs models...")
+    try:
+        from demucs.pretrained import get_model
+        
+        # Download the default model
+        print("   Downloading htdemucs...")
+        get_model("htdemucs")
+        print("   ✅ htdemucs ready")
+        
+        return True
+    except Exception as e:
+        print(f"   ⚠️ Model preload failed: {e}")
+        print("   Models will download on first use")
+        return False
+
+
 if __name__ == "__main__":
     # Get port from environment (Railway sets PORT)
     port = int(os.getenv("PORT", 8080))
@@ -850,6 +923,9 @@ if __name__ == "__main__":
     # Ensure directories exist
     UPLOAD_FOLDER.mkdir(exist_ok=True)
     OUTPUT_FOLDER.mkdir(exist_ok=True)
+    
+    # Pre-download models on startup (avoids timeout during requests)
+    preload_models()
     
     app.run(debug=debug, host="0.0.0.0", port=port)
 
