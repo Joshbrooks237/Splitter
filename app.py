@@ -15,6 +15,7 @@ import uuid
 import shutil
 import subprocess
 import traceback
+import time
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template, send_from_directory, url_for
 from flask_cors import CORS
@@ -296,26 +297,55 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     # Set environment for better compatibility
     env = os.environ.copy()
     env['PYTHONUNBUFFERED'] = '1'
-    env['OMP_NUM_THREADS'] = '1'  # Limit CPU threads to save memory
-    env['MKL_NUM_THREADS'] = '1'
+    env['OMP_NUM_THREADS'] = '2'  # Allow some parallelism
+    env['MKL_NUM_THREADS'] = '2'
     
     try:
-        result = subprocess.run(
-            cmd, 
-            capture_output=True, 
+        # Use Popen with streaming to avoid buffer deadlock
+        print(f"   Starting Demucs process...")
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Merge stderr into stdout
             text=True,
             env=env,
-            timeout=1800  # 30 minute timeout
+            bufsize=1  # Line buffered
         )
         
-        print(f"   Return code: {result.returncode}")
-        if result.stdout:
-            print(f"   Stdout (last 500 chars): ...{result.stdout[-500:]}")
-        if result.stderr:
-            print(f"   Stderr (last 500 chars): ...{result.stderr[-500:]}")
+        # Stream output in real-time
+        output_lines = []
+        start_time = time.time()
+        timeout_seconds = 1800  # 30 minutes
         
-        if result.returncode != 0:
-            error_msg = result.stderr or result.stdout or "Unknown error"
+        while True:
+            # Check timeout
+            if time.time() - start_time > timeout_seconds:
+                process.kill()
+                raise Exception("Processing timed out. Try a shorter audio file.")
+            
+            # Read line (non-blocking with timeout)
+            try:
+                line = process.stdout.readline()
+                if line:
+                    line = line.strip()
+                    output_lines.append(line)
+                    print(f"   [Demucs] {line}")
+                elif process.poll() is not None:
+                    # Process finished
+                    break
+            except Exception as read_err:
+                print(f"   Read error: {read_err}")
+                if process.poll() is not None:
+                    break
+        
+        # Get return code
+        return_code = process.wait()
+        
+        print(f"   Demucs finished with code: {return_code}")
+        print(f"   Duration: {time.time() - start_time:.1f}s")
+        
+        if return_code != 0:
+            error_msg = '\n'.join(output_lines[-10:]) if output_lines else "Unknown error"
             
             # Check for common errors
             if "out of memory" in error_msg.lower() or "oom" in error_msg.lower():
@@ -323,7 +353,7 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
             elif "killed" in error_msg.lower():
                 raise Exception("Process killed (likely out of memory). Try a shorter audio file.")
             else:
-                raise Exception(f"Separation failed: {error_msg[:200]}")
+                raise Exception(f"Separation failed: {error_msg[:300]}")
         
         return output_dir
         
@@ -714,6 +744,90 @@ def health_check():
         diagnostics["warning"] = "Low memory. Use short audio files (under 3 min) and Lightning mode."
     
     return jsonify(diagnostics)
+
+
+@app.route("/api/test-demucs")
+def test_demucs():
+    """Quick test to verify Demucs can start."""
+    import tempfile
+    import numpy as np
+    import soundfile as sf
+    
+    result = {
+        "test": "demucs_quick_start",
+        "steps": []
+    }
+    
+    try:
+        # Step 1: Create a tiny test audio file (1 second of silence)
+        result["steps"].append("Creating test audio...")
+        test_dir = tempfile.mkdtemp()
+        test_file = os.path.join(test_dir, "test.wav")
+        
+        # 1 second of near-silence at 44.1kHz
+        audio_data = np.random.randn(44100) * 0.001
+        sf.write(test_file, audio_data, 44100)
+        result["steps"].append(f"Created {os.path.getsize(test_file)} byte test file")
+        
+        # Step 2: Try to run Demucs (with 30 second timeout)
+        result["steps"].append("Starting Demucs...")
+        
+        cmd = [
+            sys.executable, "-m", "demucs",
+            "--two-stems", "vocals",
+            "--out", test_dir,
+            "-n", "htdemucs",
+            "--segment", "5",
+            test_file
+        ]
+        
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        
+        # Wait up to 60 seconds for a response
+        start = time.time()
+        output_lines = []
+        
+        while time.time() - start < 60:
+            line = process.stdout.readline()
+            if line:
+                output_lines.append(line.strip())
+                result["steps"].append(f"[Demucs] {line.strip()}")
+                # If we see "Separated" or "100%", it's working
+                if "separated" in line.lower() or "100%" in line:
+                    result["status"] = "success"
+                    result["message"] = "Demucs is working!"
+                    break
+            if process.poll() is not None:
+                break
+        
+        return_code = process.poll()
+        if return_code is None:
+            process.kill()
+            result["status"] = "timeout"
+            result["message"] = "Demucs started but didn't complete in 60s (which is expected for test)"
+        elif return_code == 0:
+            result["status"] = "success"
+            result["message"] = "Demucs completed successfully!"
+        else:
+            result["status"] = "failed"
+            result["message"] = f"Demucs exited with code {return_code}"
+        
+        result["output"] = output_lines[-20:] if output_lines else []
+        
+        # Cleanup
+        shutil.rmtree(test_dir, ignore_errors=True)
+        
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+        result["traceback"] = traceback.format_exc()
+    
+    return jsonify(result)
 
 
 @app.route("/static/<path:filename>")

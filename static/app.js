@@ -499,7 +499,7 @@ class StemSplitter {
     }
     
     async pollJobStatus(jobId) {
-        const maxAttempts = 300; // 5 minutes at 1 second intervals
+        const maxAttempts = 900; // 15 minutes at 1 second intervals (Demucs can take a while on CPU)
         let attempts = 0;
         
         while (attempts < maxAttempts) {
