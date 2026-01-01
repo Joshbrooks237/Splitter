@@ -561,21 +561,67 @@ class StemSplitter {
         const { stems, download_urls } = this.stemsData;
         const format = this.formatSelect.value.split('_')[0].toUpperCase();
         
+        console.log('🎵 Rendering stems:', Object.keys(stems));
+        console.log('📥 Download URLs:', download_urls);
+        
         for (const [stemName, filePath] of Object.entries(stems)) {
+            const downloadUrl = download_urls[stemName];
             const card = document.createElement('div');
             card.className = 'stem-card';
             card.innerHTML = `
                 <div class="stem-icon">${stemIcons[stemName] || '♫'}</div>
                 <div class="stem-name">${stemName}</div>
                 <div class="stem-format">${format}</div>
-                <a href="${download_urls[stemName]}" 
-                   class="stem-download" 
-                   download>
+                <button class="stem-download" data-url="${downloadUrl}" data-name="${stemName}">
                     ↓ Download
-                </a>
+                </button>
             `;
             
+            // Add click handler for download button
+            const btn = card.querySelector('.stem-download');
+            btn.addEventListener('click', () => this.downloadStem(downloadUrl, stemName));
+            
             this.stemsGrid.appendChild(card);
+        }
+    }
+    
+    async downloadStem(url, stemName) {
+        try {
+            console.log(`📥 Downloading ${stemName} from ${url}`);
+            
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: 'Download failed' }));
+                throw new Error(error.error || `HTTP ${response.status}`);
+            }
+            
+            // Get the blob
+            const blob = await response.blob();
+            
+            // Get filename from Content-Disposition header or use default
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `${stemName}.wav`;
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (match) filename = match[1];
+            }
+            
+            // Create download link
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            console.log(`✅ Downloaded ${stemName}`);
+            
+        } catch (error) {
+            console.error(`❌ Download error for ${stemName}:`, error);
+            this.showError(`Failed to download ${stemName}: ${error.message}`);
         }
     }
     
@@ -585,15 +631,9 @@ class StemSplitter {
         const { download_urls } = this.stemsData;
         
         for (const [stemName, url] of Object.entries(download_urls)) {
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = '';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
+            await this.downloadStem(url, stemName);
             // Small delay between downloads
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
     

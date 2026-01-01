@@ -874,15 +874,24 @@ body {
     padding: var(--space-xs) var(--space-sm);
     background: var(--accent-primary);
     color: var(--bg-primary);
+    border: none;
     border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
     font-size: 0.7rem;
     font-weight: 600;
     text-decoration: none;
+    cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .stem-download:hover {
     background: var(--accent-secondary);
+    transform: scale(1.05);
+}
+
+.stem-download:disabled {
+    opacity: 0.5;
+    cursor: wait;
 }
 
 .results-actions {

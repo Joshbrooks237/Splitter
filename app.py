@@ -30,14 +30,33 @@ from licensing import (
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "stem-splitter-dev-key-change-in-prod")
-CORS(app)
+
+# Configure CORS properly for Railway deployment
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "http://localhost:8080",
+            "http://localhost:5000",
+            "http://127.0.0.1:8080",
+            "http://127.0.0.1:5000",
+            "https://splitter-production-0a43.up.railway.app",
+            "https://*.up.railway.app",
+            "*"  # Allow all for now - tighten in production
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "expose_headers": ["Content-Disposition", "Content-Length"],
+        "supports_credentials": True
+    }
+})
 
 # Initialize licensing/payment system
 init_licensing(app)
 
-# Configuration
-UPLOAD_FOLDER = Path("uploads")
-OUTPUT_FOLDER = Path("outputs")
+# Configuration - Use absolute paths for Railway
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_FOLDER = BASE_DIR / "uploads"
+OUTPUT_FOLDER = BASE_DIR / "outputs"
 
 # Accept ALL audio formats FFmpeg can decode
 ALLOWED_EXTENSIONS = {
@@ -367,14 +386,20 @@ def separate():
             device.license.total_songs_processed += 1
         db.session.commit()
         
+        # Build download URLs with full path for Railway
+        download_urls = {}
+        for name, path in result_files.items():
+            stem_filename = Path(path).name
+            download_urls[name] = f"/api/download/{job_id}/{stem_filename}"
+        
+        print(f"✅ Job {job_id} complete. Files: {list(result_files.keys())}")
+        print(f"   Download URLs: {download_urls}")
+        
         return jsonify({
             "job_id": job_id,
             "status": "complete",
             "stems": result_files,
-            "download_urls": {
-                name: f"/api/download/{job_id}/{Path(path).name}"
-                for name, path in result_files.items()
-            },
+            "download_urls": download_urls,
             # Include updated license info
             "license": {
                 "is_trial": device.is_trial,
@@ -395,18 +420,45 @@ def separate():
 @app.route("/api/download/<job_id>/<filename>")
 def download(job_id, filename):
     """Download a separated stem file."""
-    # Find the file
-    for model_dir in (OUTPUT_FOLDER / job_id).iterdir():
-        if model_dir.is_dir():
-            for stem_dir in model_dir.iterdir():
-                if stem_dir.is_dir():
-                    file_path = stem_dir / filename
-                    if file_path.exists():
-                        return send_file(
-                            file_path,
-                            as_attachment=True,
-                            download_name=filename
-                        )
+    import mimetypes
+    
+    # Security: sanitize inputs
+    job_id = secure_filename(job_id)
+    filename = secure_filename(filename)
+    
+    job_dir = OUTPUT_FOLDER / job_id
+    
+    if not job_dir.exists():
+        return jsonify({"error": "Job not found"}), 404
+    
+    # Find the file in the job directory
+    try:
+        for model_dir in job_dir.iterdir():
+            if model_dir.is_dir():
+                for stem_dir in model_dir.iterdir():
+                    if stem_dir.is_dir():
+                        file_path = stem_dir / filename
+                        if file_path.exists():
+                            # Get MIME type
+                            mime_type, _ = mimetypes.guess_type(str(file_path))
+                            if mime_type is None:
+                                mime_type = 'application/octet-stream'
+                            
+                            # Send file with absolute path and proper headers
+                            response = send_file(
+                                str(file_path.resolve()),
+                                mimetype=mime_type,
+                                as_attachment=True,
+                                download_name=filename
+                            )
+                            
+                            # Add CORS headers explicitly
+                            response.headers['Access-Control-Allow-Origin'] = '*'
+                            response.headers['Access-Control-Expose-Headers'] = 'Content-Disposition'
+                            
+                            return response
+    except Exception as e:
+        return jsonify({"error": f"Download error: {str(e)}"}), 500
     
     return jsonify({"error": "File not found"}), 404
 
@@ -414,10 +466,32 @@ def download(job_id, filename):
 @app.route("/api/cleanup/<job_id>", methods=["POST"])
 def cleanup(job_id):
     """Clean up job files after download."""
+    job_id = secure_filename(job_id)
     job_dir = OUTPUT_FOLDER / job_id
     if job_dir.exists():
         shutil.rmtree(job_dir)
     return jsonify({"status": "cleaned"})
+
+
+@app.route("/api/debug/job/<job_id>")
+def debug_job(job_id):
+    """Debug endpoint to check job files exist."""
+    job_id = secure_filename(job_id)
+    job_dir = OUTPUT_FOLDER / job_id
+    
+    if not job_dir.exists():
+        return jsonify({"exists": False, "path": str(job_dir)})
+    
+    files = []
+    for root, dirs, filenames in os.walk(job_dir):
+        for f in filenames:
+            files.append(os.path.join(root, f))
+    
+    return jsonify({
+        "exists": True,
+        "path": str(job_dir),
+        "files": files
+    })
 
 
 @app.route("/static/<path:filename>")
