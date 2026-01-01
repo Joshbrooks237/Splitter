@@ -2,7 +2,7 @@
 # Ensures FFmpeg and other audio dependencies are installed
 
 [phases.setup]
-nixPkgs = ["ffmpeg", "libsndfile"]
+nixPkgs = ["ffmpeg", "libsndfile", "sox", "libsox-fmt-all"]
 
 [phases.install]
 cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
@@ -12,4 +12,6 @@ cmd = "python app.py"
 
 [variables]
 PYTHONUNBUFFERED = "1"
+# Force torchaudio to use sox_io backend (more compatible in containers)
+TORCHAUDIO_USE_BACKEND_DISPATCHER = "1"
 

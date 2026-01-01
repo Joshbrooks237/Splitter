@@ -21,6 +21,20 @@ from flask import Flask, request, jsonify, send_file, render_template, send_from
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import torch
+import torchaudio
+
+# Configure torchaudio backend for container compatibility
+try:
+    # Try soundfile first (uses libsndfile)
+    torchaudio.set_audio_backend("soundfile")
+    print("✅ Torchaudio backend: soundfile")
+except Exception:
+    try:
+        # Fallback to sox_io
+        torchaudio.set_audio_backend("sox_io")
+        print("✅ Torchaudio backend: sox_io")
+    except Exception as e:
+        print(f"⚠️ Could not set torchaudio backend: {e}")
 
 # Import licensing system
 from licensing import (
@@ -299,6 +313,7 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     env['PYTHONUNBUFFERED'] = '1'
     env['OMP_NUM_THREADS'] = '2'  # Allow some parallelism
     env['MKL_NUM_THREADS'] = '2'
+    env['TORCHAUDIO_USE_BACKEND_DISPATCHER'] = '1'  # Use new backend system
     
     try:
         # Use Popen with streaming to avoid buffer deadlock
