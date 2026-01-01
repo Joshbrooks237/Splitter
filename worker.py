@@ -69,15 +69,34 @@ def process_job(job, run_demucs_func, convert_func, output_formats, sample_rates
         job.message = "Processing stems..."
         
         # Find the separated stems
+        # Demucs outputs to: output_dir/{model_name}/{song_name}/
+        # But model folder name can vary (htdemucs, htdemucs_ft, htdemucs_6s, etc.)
         input_stem = Path(job.input_path).stem.replace(f"{job.job_id}_", "")
-        stems_dir = Path(job.output_dir) / model / input_stem
+        output_path = Path(job.output_dir)
+        stems_dir = None
         
-        if not stems_dir.exists():
-            # Try finding any subdirectory
-            for subdir in (Path(job.output_dir) / model).iterdir():
-                if subdir.is_dir():
-                    stems_dir = subdir
+        # Search all model directories for the stems
+        print(f"🔍 Looking for stems in: {output_path}")
+        print(f"   Contents: {list(output_path.iterdir()) if output_path.exists() else 'DIR NOT FOUND'}")
+        
+        for model_dir in output_path.iterdir():
+            if model_dir.is_dir():
+                print(f"   Checking model dir: {model_dir.name}")
+                # Look for song subdirectory
+                for song_dir in model_dir.iterdir():
+                    if song_dir.is_dir():
+                        # Check if it contains audio files
+                        audio_files = list(song_dir.glob("*.mp3")) + list(song_dir.glob("*.wav"))
+                        if audio_files:
+                            stems_dir = song_dir
+                            print(f"   ✅ Found stems in: {stems_dir}")
+                            print(f"   Files: {[f.name for f in audio_files]}")
+                            break
+                if stems_dir:
                     break
+        
+        if not stems_dir or not stems_dir.exists():
+            raise Exception(f"Could not find separated stems in {output_path}. Contents: {list(output_path.rglob('*'))}")
         
         # Convert to requested format
         format_config = output_formats.get(output_format, {"ext": "wav", "codec": "pcm_s24le"})
