@@ -10,9 +10,11 @@
 """
 
 import os
+import sys
 import uuid
 import shutil
 import subprocess
+import traceback
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template, send_from_directory, url_for
 from flask_cors import CORS
@@ -158,10 +160,13 @@ def allowed_file(filename):
 
 def get_device():
     """Detect best available device for processing."""
-    if torch.cuda.is_available():
-        return "cuda"
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        return "mps"  # Apple Silicon
+    try:
+        if torch.cuda.is_available():
+            return "cuda"
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            return "mps"  # Apple Silicon
+    except Exception as e:
+        print(f"⚠️ Device detection error: {e}")
     return "cpu"
 
 
@@ -216,8 +221,9 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     """
     device = get_device()
     
+    # Use sys.executable to ensure we use the same Python as Flask
     cmd = [
-        "python", "-m", "demucs",
+        sys.executable, "-m", "demucs",
         "--out", str(output_dir),
         "--name", model,
         "-d", device,
@@ -235,10 +241,32 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     
     cmd.append(str(input_path))
     
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"🎛️ Running Demucs: {' '.join(cmd)}")
+    print(f"   Input: {input_path}")
+    print(f"   Output: {output_dir}")
+    print(f"   Device: {device}")
+    
+    # Set environment for better compatibility
+    env = os.environ.copy()
+    env['PYTHONUNBUFFERED'] = '1'
+    
+    result = subprocess.run(
+        cmd, 
+        capture_output=True, 
+        text=True,
+        env=env,
+        timeout=1800  # 30 minute timeout
+    )
+    
+    print(f"   Return code: {result.returncode}")
+    if result.stdout:
+        print(f"   Stdout: {result.stdout[:500]}")
+    if result.stderr:
+        print(f"   Stderr: {result.stderr[:500]}")
     
     if result.returncode != 0:
-        raise Exception(f"Demucs failed: {result.stderr}")
+        error_msg = result.stderr or result.stdout or "Unknown error"
+        raise Exception(f"Demucs failed (code {result.returncode}): {error_msg[:300]}")
     
     return output_dir
 
@@ -408,13 +436,22 @@ def separate():
             }
         })
         
+    except subprocess.TimeoutExpired:
+        print(f"❌ Job {job_id} timed out")
+        return jsonify({"error": "Processing timed out. Try a shorter audio file."}), 500
+    
     except Exception as e:
+        print(f"❌ Job {job_id} failed: {str(e)}")
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
     
     finally:
         # Cleanup input file
-        if input_path.exists():
-            input_path.unlink()
+        try:
+            if input_path.exists():
+                input_path.unlink()
+        except Exception as e:
+            print(f"⚠️ Failed to cleanup input file: {e}")
 
 
 @app.route("/api/download/<job_id>/<filename>")
@@ -492,6 +529,65 @@ def debug_job(job_id):
         "path": str(job_dir),
         "files": files
     })
+
+
+@app.route("/api/health")
+def health_check():
+    """Health check endpoint with system diagnostics."""
+    import shutil as sh
+    
+    diagnostics = {
+        "status": "ok",
+        "python_version": sys.version,
+        "python_executable": sys.executable,
+        "device": get_device(),
+        "torch_version": torch.__version__,
+        "cuda_available": torch.cuda.is_available(),
+        "base_dir": str(BASE_DIR),
+        "upload_folder": str(UPLOAD_FOLDER),
+        "upload_folder_exists": UPLOAD_FOLDER.exists(),
+        "output_folder": str(OUTPUT_FOLDER),
+        "output_folder_exists": OUTPUT_FOLDER.exists(),
+    }
+    
+    # Check if demucs is installed
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "demucs", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        diagnostics["demucs_installed"] = result.returncode == 0
+        if result.returncode != 0:
+            diagnostics["demucs_error"] = result.stderr[:200]
+    except Exception as e:
+        diagnostics["demucs_installed"] = False
+        diagnostics["demucs_error"] = str(e)
+    
+    # Check if ffmpeg is installed
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        diagnostics["ffmpeg_installed"] = result.returncode == 0
+        if result.returncode == 0:
+            diagnostics["ffmpeg_version"] = result.stdout.split('\n')[0]
+    except Exception as e:
+        diagnostics["ffmpeg_installed"] = False
+        diagnostics["ffmpeg_error"] = str(e)
+    
+    # Check disk space
+    try:
+        total, used, free = sh.disk_usage("/")
+        diagnostics["disk_free_gb"] = round(free / (1024**3), 2)
+    except:
+        pass
+    
+    return jsonify(diagnostics)
 
 
 @app.route("/static/<path:filename>")
@@ -638,14 +734,24 @@ def license_status():
 
 
 if __name__ == "__main__":
-    print("""
+    # Get port from environment (Railway sets PORT)
+    port = int(os.getenv("PORT", 8080))
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    
+    print(f"""
     ╔═══════════════════════════════════════════════════════════════╗
     ║                     STEM SPLITTER                             ║
     ║              Audio Separation Laboratory                      ║
     ║                                                               ║
-    ║  Device: """ + get_device().upper() + """                                              ║
-    ║  Server: http://localhost:8080                                ║
+    ║  Device: {get_device().upper():.<48}║
+    ║  Port: {port:<50}║
+    ║  Debug: {str(debug):<49}║
     ╚═══════════════════════════════════════════════════════════════╝
     """)
-    app.run(debug=True, host="0.0.0.0", port=8080)
+    
+    # Ensure directories exist
+    UPLOAD_FOLDER.mkdir(exist_ok=True)
+    OUTPUT_FOLDER.mkdir(exist_ok=True)
+    
+    app.run(debug=debug, host="0.0.0.0", port=port)
 

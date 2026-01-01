@@ -1,0 +1,15 @@
+# Nixpacks configuration for Railway deployment
+# Ensures FFmpeg and other audio dependencies are installed
+
+[phases.setup]
+nixPkgs = ["ffmpeg", "libsndfile"]
+
+[phases.install]
+cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]
+
+[start]
+cmd = "python app.py"
+
+[variables]
+PYTHONUNBUFFERED = "1"
+
