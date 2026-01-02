@@ -653,6 +653,80 @@ def debug_job(job_id):
     })
 
 
+@app.route("/api/test-ytdlp")
+def test_ytdlp():
+    """
+    Diagnostic endpoint to test if yt-dlp works on this server.
+    Call this to debug URL extraction issues.
+    """
+    import json as json_module
+    
+    result = {
+        "test": "yt-dlp",
+        "steps": [],
+        "success": False
+    }
+    
+    # Step 1: Check if yt-dlp module exists
+    try:
+        result["steps"].append("Checking yt-dlp installation...")
+        check = subprocess.run(
+            [sys.executable, "-m", "yt_dlp", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if check.returncode == 0:
+            result["yt_dlp_version"] = check.stdout.strip()
+            result["steps"].append(f"✅ yt-dlp version: {check.stdout.strip()}")
+        else:
+            result["steps"].append(f"❌ yt-dlp check failed: {check.stderr}")
+            return jsonify(result)
+    except Exception as e:
+        result["steps"].append(f"❌ yt-dlp not installed: {e}")
+        return jsonify(result)
+    
+    # Step 2: Try to fetch info from a known working URL
+    try:
+        result["steps"].append("Testing URL extraction (Rick Astley - short timeout)...")
+        test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        
+        cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--dump-json",
+            "--no-download",
+            "--no-warnings",
+            "--socket-timeout", "15",
+            test_url
+        ]
+        
+        fetch = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if fetch.returncode == 0:
+            info = json_module.loads(fetch.stdout)
+            result["steps"].append(f"✅ Got info: {info.get('title', 'Unknown')}")
+            result["test_title"] = info.get("title")
+            result["test_duration"] = info.get("duration")
+            result["success"] = True
+        else:
+            result["steps"].append(f"❌ Extraction failed: {fetch.stderr[:200]}")
+            result["stderr"] = fetch.stderr[:500]
+            
+    except subprocess.TimeoutExpired:
+        result["steps"].append("❌ Extraction timed out after 30s")
+    except json_module.JSONDecodeError as e:
+        result["steps"].append(f"❌ JSON parse error: {e}")
+    except Exception as e:
+        result["steps"].append(f"❌ Extraction error: {e}")
+    
+    return jsonify(result)
+
+
 @app.route("/api/preload-model")
 def preload_model_endpoint():
     """Manually trigger model download."""
