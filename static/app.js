@@ -6,6 +6,9 @@
 class StemSplitter {
     constructor() {
         this.selectedFile = null;
+        this.selectedUrl = null;  // URL mode
+        this.urlMetadata = null;  // URL metadata
+        this.inputMode = 'file';  // 'file' or 'url'
         this.jobId = null;
         this.stemsData = null;
         this.licenseInfo = null;
@@ -20,9 +23,27 @@ class StemSplitter {
     }
     
     cacheDOM() {
-        // Drop zone
+        // Mode toggle
+        this.fileModeBtn = document.getElementById('fileModeBtn');
+        this.urlModeBtn = document.getElementById('urlModeBtn');
+        
+        // Drop zone (file mode)
         this.dropZone = document.getElementById('dropZone');
         this.fileInput = document.getElementById('fileInput');
+        
+        // URL zone (url mode)
+        this.urlZone = document.getElementById('urlZone');
+        this.urlInput = document.getElementById('urlInput');
+        this.extractBtn = document.getElementById('extractBtn');
+        this.urlStatus = document.getElementById('urlStatus');
+        
+        // URL info (shown after URL extracted)
+        this.urlInfo = document.getElementById('urlInfo');
+        this.urlThumbnail = document.getElementById('urlThumbnail');
+        this.urlTitle = document.getElementById('urlTitle');
+        this.urlUploader = document.getElementById('urlUploader');
+        this.urlDuration = document.getElementById('urlDuration');
+        this.clearUrl = document.getElementById('clearUrl');
         
         // File info
         this.fileInfo = document.getElementById('fileInfo');
@@ -52,6 +73,14 @@ class StemSplitter {
     }
     
     bindEvents() {
+        // Mode toggle
+        if (this.fileModeBtn) {
+            this.fileModeBtn.addEventListener('click', () => this.setInputMode('file'));
+        }
+        if (this.urlModeBtn) {
+            this.urlModeBtn.addEventListener('click', () => this.setInputMode('url'));
+        }
+        
         // Drag and drop
         this.dropZone.addEventListener('click', () => this.fileInput.click());
         this.dropZone.addEventListener('dragover', (e) => this.handleDragOver(e));
@@ -63,6 +92,19 @@ class StemSplitter {
         
         // Clear file
         this.clearFile.addEventListener('click', () => this.resetToInitial());
+        
+        // URL mode events
+        if (this.extractBtn) {
+            this.extractBtn.addEventListener('click', () => this.handleUrlExtract());
+        }
+        if (this.urlInput) {
+            this.urlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.handleUrlExtract();
+            });
+        }
+        if (this.clearUrl) {
+            this.clearUrl.addEventListener('click', () => this.resetUrlMode());
+        }
         
         // Process button
         this.processBtn.addEventListener('click', () => this.startProcessing());
@@ -118,6 +160,135 @@ class StemSplitter {
                 }
             });
         });
+    }
+    
+    setInputMode(mode) {
+        this.inputMode = mode;
+        
+        // Update toggle buttons
+        if (this.fileModeBtn) {
+            this.fileModeBtn.classList.toggle('active', mode === 'file');
+        }
+        if (this.urlModeBtn) {
+            this.urlModeBtn.classList.toggle('active', mode === 'url');
+        }
+        
+        // Show/hide appropriate zones
+        if (mode === 'file') {
+            if (this.dropZone) this.dropZone.classList.remove('hidden');
+            if (this.urlZone) this.urlZone.classList.add('hidden');
+            if (this.urlInfo) this.urlInfo.classList.add('hidden');
+            // Reset URL state
+            this.selectedUrl = null;
+            this.urlMetadata = null;
+        } else {
+            if (this.dropZone) this.dropZone.classList.add('hidden');
+            if (this.fileInfo) this.fileInfo.classList.add('hidden');
+            if (this.urlZone) this.urlZone.classList.remove('hidden');
+            // Reset file state
+            this.selectedFile = null;
+        }
+        
+        // Reset process button
+        this.processBtn.disabled = true;
+        
+        console.log(`🔄 Input mode: ${mode}`);
+    }
+    
+    async handleUrlExtract() {
+        const url = this.urlInput?.value?.trim();
+        
+        if (!url) {
+            this.showError('Please enter a URL');
+            return;
+        }
+        
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            this.showError('URL must start with http:// or https://');
+            return;
+        }
+        
+        console.log('🔗 Extracting URL info:', url);
+        
+        // Show loading state
+        if (this.extractBtn) {
+            this.extractBtn.disabled = true;
+            this.extractBtn.textContent = 'LOADING...';
+        }
+        if (this.urlStatus) {
+            this.urlStatus.textContent = 'Fetching info...';
+            this.urlStatus.className = 'url-status loading';
+        }
+        
+        try {
+            const response = await fetch('/api/url-info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to fetch URL info');
+            }
+            
+            console.log('✅ URL info:', data);
+            
+            // Store URL metadata
+            this.selectedUrl = url;
+            this.urlMetadata = data;
+            
+            // Update UI
+            if (this.urlZone) this.urlZone.classList.add('hidden');
+            if (this.urlInfo) this.urlInfo.classList.remove('hidden');
+            
+            if (this.urlTitle) this.urlTitle.textContent = data.title || 'Unknown';
+            if (this.urlUploader) this.urlUploader.textContent = data.uploader || '';
+            if (this.urlDuration) this.urlDuration.textContent = data.duration_string || '';
+            if (this.urlThumbnail && data.thumbnail) {
+                this.urlThumbnail.src = data.thumbnail;
+            }
+            
+            // Enable process button
+            this.processBtn.disabled = false;
+            
+            // Clear status
+            if (this.urlStatus) {
+                this.urlStatus.textContent = '';
+                this.urlStatus.className = 'url-status';
+            }
+            
+        } catch (error) {
+            console.error('❌ URL fetch error:', error);
+            this.showError(error.message);
+            
+            if (this.urlStatus) {
+                this.urlStatus.textContent = error.message;
+                this.urlStatus.className = 'url-status error';
+            }
+        } finally {
+            // Reset button
+            if (this.extractBtn) {
+                this.extractBtn.disabled = false;
+                this.extractBtn.textContent = 'EXTRACT';
+            }
+        }
+    }
+    
+    resetUrlMode() {
+        this.selectedUrl = null;
+        this.urlMetadata = null;
+        
+        if (this.urlInfo) this.urlInfo.classList.add('hidden');
+        if (this.urlZone) this.urlZone.classList.remove('hidden');
+        if (this.urlInput) this.urlInput.value = '';
+        if (this.urlStatus) {
+            this.urlStatus.textContent = '';
+            this.urlStatus.className = 'url-status';
+        }
+        
+        this.processBtn.disabled = true;
     }
     
     async checkSystemStatus() {
@@ -432,45 +603,77 @@ class StemSplitter {
     }
     
     async startProcessing() {
-        if (!this.selectedFile) return;
+        // Check we have something to process
+        if (this.inputMode === 'file' && !this.selectedFile) return;
+        if (this.inputMode === 'url' && !this.selectedUrl) return;
         
         const options = this.getSelectedOptions();
         
         // Show processing state
         this.controlPanel.classList.add('hidden');
-        this.fileInfo.classList.add('hidden');
+        if (this.fileInfo) this.fileInfo.classList.add('hidden');
+        if (this.urlInfo) this.urlInfo.classList.add('hidden');
         this.processingState.classList.remove('hidden');
         
-        // Create form data
-        const formData = new FormData();
-        formData.append('file', this.selectedFile);
-        formData.append('quality', options.quality);
-        formData.append('format', options.format);
-        formData.append('stems', options.stems);
-        if (options.sampleRate) {
-            formData.append('sample_rate', options.sampleRate);
-        }
-        
-        // Simulate progress (since we can't track actual progress easily)
+        // Simulate progress
         this.simulateProgress();
         
         try {
-            this.updateProcessingStatus('Uploading audio file...');
+            let result;
             
-            // Step 1: Upload and start processing
-            const response = await fetch('/api/separate', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const result = await response.json();
-            
-            if (!response.ok) {
-                if (response.status === 402 && result.trial_expired) {
-                    this.showUpgradeModal();
-                    throw new Error('Trial expired - upgrade to continue');
+            if (this.inputMode === 'url') {
+                // URL mode - send JSON
+                this.updateProcessingStatus('Downloading audio from URL...');
+                
+                const response = await fetch('/api/separate-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: this.selectedUrl,
+                        quality: options.quality,
+                        format: options.format,
+                        stems: options.stems,
+                        sample_rate: options.sampleRate || null
+                    })
+                });
+                
+                result = await response.json();
+                
+                if (!response.ok) {
+                    if (response.status === 402 && result.trial_expired) {
+                        this.showUpgradeModal();
+                        throw new Error('Trial expired - upgrade to continue');
+                    }
+                    throw new Error(result.error || 'Failed to start processing');
                 }
-                throw new Error(result.error || 'Failed to start processing');
+                
+            } else {
+                // File mode - send FormData
+                this.updateProcessingStatus('Uploading audio file...');
+                
+                const formData = new FormData();
+                formData.append('file', this.selectedFile);
+                formData.append('quality', options.quality);
+                formData.append('format', options.format);
+                formData.append('stems', options.stems);
+                if (options.sampleRate) {
+                    formData.append('sample_rate', options.sampleRate);
+                }
+                
+                const response = await fetch('/api/separate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                result = await response.json();
+                
+                if (!response.ok) {
+                    if (response.status === 402 && result.trial_expired) {
+                        this.showUpgradeModal();
+                        throw new Error('Trial expired - upgrade to continue');
+                    }
+                    throw new Error(result.error || 'Failed to start processing');
+                }
             }
             
             this.jobId = result.job_id;
@@ -482,7 +685,7 @@ class StemSplitter {
                 this.updateLicenseUI();
             }
             
-            // Step 2: Poll for completion
+            // Poll for completion
             this.updateProcessingStatus('Processing audio (this may take a few minutes)...');
             const finalResult = await this.pollJobStatus(result.job_id);
             
@@ -746,13 +949,26 @@ class StemSplitter {
     
     resetUI() {
         this.selectedFile = null;
+        this.selectedUrl = null;
+        this.urlMetadata = null;
         this.jobId = null;
         this.stemsData = null;
         
         this.results.classList.add('hidden');
         this.processingState.classList.add('hidden');
-        this.fileInfo.classList.add('hidden');
-        this.dropZone.classList.remove('hidden');
+        if (this.fileInfo) this.fileInfo.classList.add('hidden');
+        if (this.urlInfo) this.urlInfo.classList.add('hidden');
+        
+        // Show correct input zone based on mode
+        if (this.inputMode === 'url') {
+            if (this.dropZone) this.dropZone.classList.add('hidden');
+            if (this.urlZone) this.urlZone.classList.remove('hidden');
+            if (this.urlInput) this.urlInput.value = '';
+        } else {
+            if (this.dropZone) this.dropZone.classList.remove('hidden');
+            if (this.urlZone) this.urlZone.classList.add('hidden');
+        }
+        
         this.controlPanel.classList.remove('hidden');
         
         this.progressFill.style.width = '0%';

@@ -54,6 +54,16 @@
 
         <!-- Main Content -->
         <main class="main">
+            <!-- Input Mode Toggle -->
+            <div class="input-mode-toggle">
+                <button class="mode-btn active" data-mode="file" id="fileModeBtn">
+                    <span class="mode-icon">📁</span> Upload File
+                </button>
+                <button class="mode-btn" data-mode="url" id="urlModeBtn">
+                    <span class="mode-icon">🔗</span> Paste URL
+                </button>
+            </div>
+
             <!-- Drop Zone -->
             <div class="drop-zone" id="dropZone">
                 <div class="drop-zone-content">
@@ -83,6 +93,35 @@
                     </div>
                 </div>
                 <input type="file" id="fileInput" accept="audio/*,video/*,.mp3,.wav,.flac,.ogg,.m4a,.aac,.wma,.aiff,.opus,.ape,.wv,.mka,.mkv,.webm,.ac3,.dts,.alac,.mid,.midi" hidden>
+            </div>
+
+            <!-- URL Input Zone (hidden by default) -->
+            <div class="url-zone hidden" id="urlZone">
+                <div class="url-zone-content">
+                    <div class="url-icon">🔗</div>
+                    <h2>PASTE A URL</h2>
+                    <p>YouTube, SoundCloud, Bandcamp & 1000+ sites</p>
+                    <div class="url-input-wrapper">
+                        <input type="text" id="urlInput" placeholder="https://youtube.com/watch?v=..." autocomplete="off">
+                        <button class="btn-extract" id="extractBtn">EXTRACT</button>
+                    </div>
+                    <div class="url-status" id="urlStatus"></div>
+                </div>
+            </div>
+
+            <!-- URL Info (shown after URL extracted) -->
+            <div class="url-info hidden" id="urlInfo">
+                <div class="url-thumbnail-wrapper">
+                    <img id="urlThumbnail" src="" alt="Thumbnail">
+                </div>
+                <div class="url-details">
+                    <div class="url-title" id="urlTitle">Song Title</div>
+                    <div class="url-meta">
+                        <span id="urlUploader">Artist</span>
+                        <span id="urlDuration">0:00</span>
+                    </div>
+                    <button class="btn-clear" id="clearUrl">✕ Change URL</button>
+                </div>
             </div>
 
             <!-- File Info (shown after file selected) -->

@@ -30,4 +30,7 @@ tqdm==4.66.1
 uuid6==2024.1.12
 psutil==5.9.0
 
+# URL Audio Extraction (YouTube, SoundCloud, etc.)
+yt-dlp>=2024.1.0
+
 

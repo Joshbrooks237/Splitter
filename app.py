@@ -847,6 +847,234 @@ def test_demucs():
     return jsonify(result)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# URL EXTRACTION ENDPOINTS (YouTube, SoundCloud, Bandcamp, etc.)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/url-info", methods=["POST"])
+def url_info():
+    """
+    Fetch metadata about a URL (title, duration, thumbnail) without downloading.
+    Uses yt-dlp which supports 1000+ sites.
+    """
+    try:
+        import yt_dlp
+        import socket
+        
+        data = request.get_json()
+        url = data.get("url", "").strip()
+        
+        if not url:
+            return jsonify({"error": "No URL provided"}), 400
+        
+        # Basic URL validation
+        if not url.startswith(("http://", "https://")):
+            return jsonify({"error": "Invalid URL - must start with http:// or https://"}), 400
+        
+        print(f"🔗 Fetching URL info: {url}")
+        
+        # Set socket timeout to prevent hanging
+        original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(30)  # 30 second timeout
+        
+        try:
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": False,  # Get full info
+                "skip_download": True,
+                "socket_timeout": 30,
+                "retries": 2,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            
+            if not info:
+                return jsonify({"error": "Could not extract info from URL"}), 400
+            
+            # Extract relevant metadata
+            result = {
+                "title": info.get("title", "Unknown"),
+                "duration": info.get("duration", 0),
+                "duration_string": info.get("duration_string", ""),
+                "thumbnail": info.get("thumbnail", ""),
+                "uploader": info.get("uploader", info.get("channel", "")),
+                "extractor": info.get("extractor", ""),
+                "url": url,
+            }
+            
+            print(f"   ✅ Found: {result['title']} ({result['duration_string']})")
+            return jsonify(result)
+            
+        finally:
+            socket.setdefaulttimeout(original_timeout)
+            
+    except Exception as e:
+        error_msg = str(e)
+        print(f"   ❌ URL info error: {error_msg}")
+        
+        # Friendly error messages
+        if "Unsupported URL" in error_msg:
+            return jsonify({"error": "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, or other major platforms."}), 400
+        elif "Video unavailable" in error_msg or "Private video" in error_msg:
+            return jsonify({"error": "This video is unavailable or private."}), 400
+        elif "timed out" in error_msg.lower():
+            return jsonify({"error": "Request timed out. Please try again."}), 504
+        else:
+            return jsonify({"error": f"Could not fetch URL info: {error_msg[:100]}"}), 400
+
+
+@app.route("/api/separate-url", methods=["POST"])
+@require_processing_rights
+def separate_url():
+    """
+    Download audio from URL and start stem separation.
+    Same as /api/separate but with URL input instead of file upload.
+    """
+    try:
+        import yt_dlp
+        import socket
+        
+        data = request.get_json()
+        url = data.get("url", "").strip()
+        
+        if not url:
+            return jsonify({"error": "No URL provided"}), 400
+        
+        # Get options
+        quality = data.get("quality", "balanced")
+        output_format = data.get("format", "wav_24bit")
+        requested_stems = data.get("stems", "all")
+        sample_rate = data.get("sample_rate", None)
+        
+        # Validate options
+        if quality not in MODELS:
+            return jsonify({"error": f"Invalid quality. Options: {', '.join(MODELS.keys())}"}), 400
+        
+        if output_format not in OUTPUT_FORMATS:
+            return jsonify({"error": f"Invalid format. Options: {', '.join(OUTPUT_FORMATS.keys())}"}), 400
+        
+        if sample_rate and sample_rate not in SAMPLE_RATES:
+            return jsonify({"error": f"Invalid sample rate. Options: {', '.join(SAMPLE_RATES.keys())}"}), 400
+        
+        # Create unique job ID
+        job_id = str(uuid.uuid4())[:8]
+        
+        print(f"🔗 Downloading audio from URL: {url}")
+        
+        # Download audio to upload folder
+        input_path = UPLOAD_FOLDER / f"{job_id}_url_audio.mp3"
+        
+        # Set socket timeout
+        original_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(120)  # 2 minute timeout for download
+        
+        try:
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": str(input_path.with_suffix("")),  # yt-dlp adds extension
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "mp3",
+                    "preferredquality": "192",
+                }],
+                "quiet": True,
+                "no_warnings": True,
+                "socket_timeout": 60,
+                "retries": 3,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get("title", "audio")
+            
+            # Find the downloaded file (yt-dlp might add extension)
+            possible_paths = [
+                input_path,
+                input_path.with_suffix(".mp3"),
+                UPLOAD_FOLDER / f"{job_id}_url_audio.mp3",
+            ]
+            
+            actual_path = None
+            for p in possible_paths:
+                if p.exists():
+                    actual_path = p
+                    break
+            
+            # Also check for any file matching the pattern
+            if not actual_path:
+                for f in UPLOAD_FOLDER.glob(f"{job_id}_url_audio*"):
+                    actual_path = f
+                    break
+            
+            if not actual_path or not actual_path.exists():
+                return jsonify({"error": "Failed to download audio from URL"}), 500
+            
+            input_path = actual_path
+            print(f"   ✅ Downloaded: {input_path.name} ({input_path.stat().st_size / 1024 / 1024:.1f} MB)")
+            
+        finally:
+            socket.setdefaulttimeout(original_timeout)
+        
+        # Create output directory
+        job_output_dir = OUTPUT_FOLDER / job_id
+        job_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Prepare job options
+        model = MODELS[quality]
+        stems_filter = None if requested_stems == "all" else [requested_stems]
+        
+        job_options = {
+            "model": model,
+            "stems_filter": stems_filter,
+            "output_format": output_format,
+            "sample_rate": sample_rate,
+            "requested_stems": requested_stems,
+            "source_url": url,
+            "source_title": title,
+        }
+        
+        # Create and start async job
+        job = Job(
+            job_id=job_id,
+            input_path=str(input_path),
+            output_dir=str(job_output_dir),
+            options=job_options
+        )
+        
+        # Increment usage counter
+        device = request.device
+        device.songs_processed += 1
+        if device.license:
+            device.license.total_songs_processed += 1
+        db.session.commit()
+        
+        # Start background processing
+        start_job(job, run_demucs, convert_audio_format, OUTPUT_FORMATS, SAMPLE_RATES)
+        
+        print(f"🚀 URL Job {job_id} started in background")
+        
+        return jsonify({
+            "job_id": job_id,
+            "status": "processing",
+            "title": title,
+            "message": "Processing started. Poll /api/job/{job_id} for status.",
+            "poll_url": f"/api/job/{job_id}",
+            "license": {
+                "is_trial": device.is_trial,
+                "songs_processed": device.songs_processed,
+                "songs_remaining": device.songs_remaining if device.is_trial else "unlimited",
+            }
+        })
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"   ❌ URL separation error: {error_msg}")
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to process URL: {error_msg[:200]}"}), 500
+
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
