@@ -855,74 +855,88 @@ def test_demucs():
 def url_info():
     """
     Fetch metadata about a URL (title, duration, thumbnail) without downloading.
-    Uses yt-dlp which supports 1000+ sites.
+    Uses yt-dlp CLI for stability (library can crash the server).
     """
+    import json as json_module
+    
+    data = request.get_json()
+    url = data.get("url", "").strip()
+    
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+    
+    # Basic URL validation
+    if not url.startswith(("http://", "https://")):
+        return jsonify({"error": "Invalid URL - must start with http:// or https://"}), 400
+    
+    print(f"🔗 Fetching URL info: {url}")
+    
     try:
-        import yt_dlp
-        import socket
+        # Use yt-dlp CLI instead of library (more stable, won't crash server)
+        cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--dump-json",
+            "--no-download",
+            "--no-warnings",
+            "--socket-timeout", "30",
+            url
+        ]
         
-        data = request.get_json()
-        url = data.get("url", "").strip()
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=45  # 45 second timeout
+        )
         
-        if not url:
-            return jsonify({"error": "No URL provided"}), 400
-        
-        # Basic URL validation
-        if not url.startswith(("http://", "https://")):
-            return jsonify({"error": "Invalid URL - must start with http:// or https://"}), 400
-        
-        print(f"🔗 Fetching URL info: {url}")
-        
-        # Set socket timeout to prevent hanging
-        original_timeout = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(30)  # 30 second timeout
-        
-        try:
-            ydl_opts = {
-                "quiet": True,
-                "no_warnings": True,
-                "extract_flat": False,  # Get full info
-                "skip_download": True,
-                "socket_timeout": 30,
-                "retries": 2,
-            }
+        if result.returncode != 0:
+            error_msg = result.stderr or "Unknown error"
+            print(f"   ❌ yt-dlp error: {error_msg[:200]}")
             
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-            
-            if not info:
-                return jsonify({"error": "Could not extract info from URL"}), 400
-            
-            # Extract relevant metadata
-            result = {
-                "title": info.get("title", "Unknown"),
-                "duration": info.get("duration", 0),
-                "duration_string": info.get("duration_string", ""),
-                "thumbnail": info.get("thumbnail", ""),
-                "uploader": info.get("uploader", info.get("channel", "")),
-                "extractor": info.get("extractor", ""),
-                "url": url,
-            }
-            
-            print(f"   ✅ Found: {result['title']} ({result['duration_string']})")
-            return jsonify(result)
-            
-        finally:
-            socket.setdefaulttimeout(original_timeout)
-            
-    except Exception as e:
-        error_msg = str(e)
-        print(f"   ❌ URL info error: {error_msg}")
+            # Friendly error messages
+            if "Unsupported URL" in error_msg:
+                return jsonify({"error": "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, etc."}), 400
+            elif "Video unavailable" in error_msg or "Private video" in error_msg:
+                return jsonify({"error": "This video is unavailable or private."}), 400
+            elif "Sign in" in error_msg:
+                return jsonify({"error": "This content requires login and cannot be accessed."}), 400
+            else:
+                return jsonify({"error": f"Could not fetch URL: {error_msg[:100]}"}), 400
         
-        # Friendly error messages
-        if "Unsupported URL" in error_msg:
-            return jsonify({"error": "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, or other major platforms."}), 400
-        elif "Video unavailable" in error_msg or "Private video" in error_msg:
-            return jsonify({"error": "This video is unavailable or private."}), 400
-        elif "timed out" in error_msg.lower():
-            return jsonify({"error": "Request timed out. Please try again."}), 504
+        # Parse JSON output
+        info = json_module.loads(result.stdout)
+        
+        # Format duration
+        duration = info.get("duration", 0)
+        if duration:
+            mins, secs = divmod(int(duration), 60)
+            duration_string = f"{mins}:{secs:02d}"
         else:
-            return jsonify({"error": f"Could not fetch URL info: {error_msg[:100]}"}), 400
+            duration_string = ""
+        
+        response = {
+            "title": info.get("title", "Unknown"),
+            "duration": duration,
+            "duration_string": duration_string,
+            "thumbnail": info.get("thumbnail", ""),
+            "uploader": info.get("uploader", info.get("channel", "")),
+            "extractor": info.get("extractor", ""),
+            "url": url,
+        }
+        
+        print(f"   ✅ Found: {response['title']} ({duration_string})")
+        return jsonify(response)
+        
+    except subprocess.TimeoutExpired:
+        print(f"   ❌ URL fetch timed out")
+        return jsonify({"error": "Request timed out. Please try again."}), 504
+    except json_module.JSONDecodeError as e:
+        print(f"   ❌ JSON parse error: {e}")
+        return jsonify({"error": "Failed to parse URL info"}), 500
+    except Exception as e:
+        print(f"   ❌ URL info error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": f"Error: {str(e)[:100]}"}), 500
 
 
 @app.route("/api/separate-url", methods=["POST"])
@@ -930,92 +944,103 @@ def url_info():
 def separate_url():
     """
     Download audio from URL and start stem separation.
-    Same as /api/separate but with URL input instead of file upload.
+    Uses yt-dlp CLI for stability.
     """
+    import json as json_module
+    
+    data = request.get_json()
+    url = data.get("url", "").strip()
+    
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+    
+    # Get options
+    quality = data.get("quality", "balanced")
+    output_format = data.get("format", "wav_24bit")
+    requested_stems = data.get("stems", "all")
+    sample_rate = data.get("sample_rate", None)
+    
+    # Validate options
+    if quality not in MODELS:
+        return jsonify({"error": f"Invalid quality. Options: {', '.join(MODELS.keys())}"}), 400
+    
+    if output_format not in OUTPUT_FORMATS:
+        return jsonify({"error": f"Invalid format. Options: {', '.join(OUTPUT_FORMATS.keys())}"}), 400
+    
+    if sample_rate and sample_rate not in SAMPLE_RATES:
+        return jsonify({"error": f"Invalid sample rate. Options: {', '.join(SAMPLE_RATES.keys())}"}), 400
+    
+    # Create unique job ID
+    job_id = str(uuid.uuid4())[:8]
+    
+    print(f"🔗 Downloading audio from URL: {url}")
+    
     try:
-        import yt_dlp
-        import socket
+        # Download audio using yt-dlp CLI (more stable than library)
+        output_template = str(UPLOAD_FOLDER / f"{job_id}_url_audio")
         
-        data = request.get_json()
-        url = data.get("url", "").strip()
+        cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--extract-audio",
+            "--audio-format", "mp3",
+            "--audio-quality", "192K",
+            "--output", output_template + ".%(ext)s",
+            "--no-warnings",
+            "--socket-timeout", "60",
+            "--retries", "3",
+            "--print", "after_move:filepath",  # Print final path
+            url
+        ]
         
-        if not url:
-            return jsonify({"error": "No URL provided"}), 400
+        print(f"   Running: {' '.join(cmd[:8])}...")
         
-        # Get options
-        quality = data.get("quality", "balanced")
-        output_format = data.get("format", "wav_24bit")
-        requested_stems = data.get("stems", "all")
-        sample_rate = data.get("sample_rate", None)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=180  # 3 minute timeout for download
+        )
         
-        # Validate options
-        if quality not in MODELS:
-            return jsonify({"error": f"Invalid quality. Options: {', '.join(MODELS.keys())}"}), 400
+        if result.returncode != 0:
+            error_msg = result.stderr or "Download failed"
+            print(f"   ❌ yt-dlp download error: {error_msg[:200]}")
+            return jsonify({"error": f"Download failed: {error_msg[:100]}"}), 500
         
-        if output_format not in OUTPUT_FORMATS:
-            return jsonify({"error": f"Invalid format. Options: {', '.join(OUTPUT_FORMATS.keys())}"}), 400
+        # Find the downloaded file
+        actual_path = None
         
-        if sample_rate and sample_rate not in SAMPLE_RATES:
-            return jsonify({"error": f"Invalid sample rate. Options: {', '.join(SAMPLE_RATES.keys())}"}), 400
+        # First try the printed filepath
+        if result.stdout.strip():
+            printed_path = Path(result.stdout.strip().split('\n')[-1])
+            if printed_path.exists():
+                actual_path = printed_path
         
-        # Create unique job ID
-        job_id = str(uuid.uuid4())[:8]
-        
-        print(f"🔗 Downloading audio from URL: {url}")
-        
-        # Download audio to upload folder
-        input_path = UPLOAD_FOLDER / f"{job_id}_url_audio.mp3"
-        
-        # Set socket timeout
-        original_timeout = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(120)  # 2 minute timeout for download
-        
-        try:
-            ydl_opts = {
-                "format": "bestaudio/best",
-                "outtmpl": str(input_path.with_suffix("")),  # yt-dlp adds extension
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "mp3",
-                    "preferredquality": "192",
-                }],
-                "quiet": True,
-                "no_warnings": True,
-                "socket_timeout": 60,
-                "retries": 3,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                title = info.get("title", "audio")
-            
-            # Find the downloaded file (yt-dlp might add extension)
-            possible_paths = [
-                input_path,
-                input_path.with_suffix(".mp3"),
-                UPLOAD_FOLDER / f"{job_id}_url_audio.mp3",
-            ]
-            
-            actual_path = None
-            for p in possible_paths:
-                if p.exists():
-                    actual_path = p
-                    break
-            
-            # Also check for any file matching the pattern
-            if not actual_path:
-                for f in UPLOAD_FOLDER.glob(f"{job_id}_url_audio*"):
+        # Fallback: search for the file
+        if not actual_path:
+            for f in UPLOAD_FOLDER.glob(f"{job_id}_url_audio*"):
+                if f.is_file() and f.suffix in ['.mp3', '.m4a', '.webm', '.opus', '.wav']:
                     actual_path = f
                     break
-            
-            if not actual_path or not actual_path.exists():
-                return jsonify({"error": "Failed to download audio from URL"}), 500
-            
-            input_path = actual_path
-            print(f"   ✅ Downloaded: {input_path.name} ({input_path.stat().st_size / 1024 / 1024:.1f} MB)")
-            
-        finally:
-            socket.setdefaulttimeout(original_timeout)
+        
+        if not actual_path or not actual_path.exists():
+            print(f"   ❌ Downloaded file not found")
+            print(f"   stdout: {result.stdout[:200]}")
+            print(f"   stderr: {result.stderr[:200]}")
+            return jsonify({"error": "Failed to download audio from URL"}), 500
+        
+        input_path = actual_path
+        print(f"   ✅ Downloaded: {input_path.name} ({input_path.stat().st_size / 1024 / 1024:.1f} MB)")
+        
+        # Get title from a quick info fetch
+        title = "audio"
+        try:
+            info_cmd = [sys.executable, "-m", "yt_dlp", "--dump-json", "--no-download", url]
+            info_result = subprocess.run(info_cmd, capture_output=True, text=True, timeout=15)
+            if info_result.returncode == 0:
+                info = json_module.loads(info_result.stdout)
+                title = info.get("title", "audio")
+        except:
+            pass  # Title is optional
         
         # Create output directory
         job_output_dir = OUTPUT_FOLDER / job_id
@@ -1068,6 +1093,9 @@ def separate_url():
             }
         })
         
+    except subprocess.TimeoutExpired:
+        print(f"   ❌ Download timed out")
+        return jsonify({"error": "Download timed out. Try a shorter video."}), 504
     except Exception as e:
         error_msg = str(e)
         print(f"   ❌ URL separation error: {error_msg}")
