@@ -741,11 +741,16 @@ def preload_model_endpoint():
         return jsonify({"success": False, "model": model, "error": str(e)}), 500
 
 
+@app.route("/api/ping")
+def ping():
+    """Simple ping endpoint to verify server is alive."""
+    return jsonify({"status": "ok", "message": "pong"})
+
+
 @app.route("/api/health")
 def health_check():
     """Health check endpoint with system diagnostics."""
     import shutil as sh
-    import psutil
     
     is_cloud = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("PORT")
     
@@ -762,7 +767,7 @@ def health_check():
         "output_folder_exists": OUTPUT_FOLDER.exists(),
     }
     
-    # Memory info
+    # Memory info (psutil is optional)
     try:
         import psutil
         mem = psutil.virtual_memory()
@@ -773,6 +778,21 @@ def health_check():
         diagnostics["memory_info"] = "psutil not installed"
     except Exception as e:
         diagnostics["memory_error"] = str(e)
+    
+    # Check yt-dlp
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "yt_dlp", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        diagnostics["ytdlp_installed"] = result.returncode == 0
+        if result.returncode == 0:
+            diagnostics["ytdlp_version"] = result.stdout.strip()
+    except Exception as e:
+        diagnostics["ytdlp_installed"] = False
+        diagnostics["ytdlp_error"] = str(e)
     
     # Check if demucs is installed
     try:
