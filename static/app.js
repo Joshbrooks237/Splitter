@@ -338,7 +338,7 @@ class StemSplitter {
                     <span class="license-icon">🎁</span>
                     <span class="license-text">FREE TRIAL: ${remaining} song${remaining !== 1 ? 's' : ''} remaining</span>
                     <button class="btn-upgrade" onclick="window.stemSplitter.showUpgradeModal()">
-                        Upgrade $40
+                        Upgrade $30
                     </button>
                 </div>
             `;
@@ -358,7 +358,7 @@ class StemSplitter {
             <div class="upgrade-modal-content">
                 <button class="modal-close" onclick="this.closest('.upgrade-modal').remove()">✕</button>
                 <h2>🚀 UPGRADE TO UNLIMITED</h2>
-                <p class="upgrade-price">$40 <span>one-time payment</span></p>
+                <p class="upgrade-price">$30 <span>one-time payment</span></p>
                 
                 <ul class="upgrade-features">
                     <li>✓ Unlimited stem separations forever</li>

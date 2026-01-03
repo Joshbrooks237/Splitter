@@ -6,7 +6,7 @@
 
 Pricing Model:
 - 2 free songs to try (full quality, all features)
-- $40 one-time payment for unlimited forever
+- $30 one-time payment for unlimited forever
 """
 
 import os
@@ -23,7 +23,7 @@ db = SQLAlchemy()
 
 # Configuration
 FREE_TRIAL_SONGS = 2
-PRODUCT_PRICE_USD = 4000  # $40.00 in cents
+PRODUCT_PRICE_USD = 3000  # $30.00 in cents
 
 # Stripe Configuration (set via environment variables)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
@@ -195,7 +195,7 @@ def require_processing_rights(f):
         if not device.can_process:
             return jsonify({
                 "error": "Trial expired",
-                "message": "You've used your 2 free songs. Upgrade to unlimited for $40!",
+                "message": "You've used your 2 free songs. Upgrade to unlimited for $30!",
                 "trial_expired": True,
                 "songs_processed": device.songs_processed,
                 "upgrade_url": "/api/checkout"
@@ -214,7 +214,7 @@ def require_processing_rights(f):
 
 def create_checkout_session(success_url, cancel_url):
     """
-    Create a Stripe Checkout session for the $40 one-time payment.
+    Create a Stripe Checkout session for the $30 one-time payment.
     """
     if not stripe.api_key:
         raise ValueError("Stripe API key not configured")

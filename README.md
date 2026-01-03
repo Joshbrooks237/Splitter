@@ -235,7 +235,7 @@ The system automatically detects and utilizes:
 <br>
 
 <p align="center">
-  <strong>🎁 2 FREE SONGS TO TRY &nbsp;→&nbsp; $40 ONCE, UNLIMITED FOREVER</strong>
+  <strong>🎁 2 FREE SONGS TO TRY &nbsp;→&nbsp; $30 ONCE, UNLIMITED FOREVER</strong>
 </p>
 
 <table>
@@ -253,19 +253,19 @@ The system automatically detects and utilizes:
 </tr>
 <tr>
 <td><strong>Price</strong></td>
-<td>🟢 <strong>$40 once. Forever.</strong></td>
+<td>🟢 <strong>$30 once. Forever.</strong></td>
 <td>🔴 $30+/month</td>
 <td>🔴 $$$/month</td>
 </tr>
 <tr>
 <td><strong>After 2 months</strong></td>
-<td>🟢 Still $40</td>
+<td>🟢 Still $30</td>
 <td>🔴 $60+</td>
 <td>🔴 $$$+</td>
 </tr>
 <tr>
 <td><strong>After 1 year</strong></td>
-<td>🟢 Still $40</td>
+<td>🟢 Still $30</td>
 <td>🔴 $360+</td>
 <td>🔴 $$$$</td>
 </tr>
@@ -347,7 +347,7 @@ The DJ who needs that acapella at 3 AM.
 The musician who wants to learn from the masters.
 The creator who refuses to be subscription-trapped.
 
-**2 songs free. Then $40 once. Unlimited forever.**
+**2 songs free. Then $30 once. Unlimited forever.**
 
 <br>
 

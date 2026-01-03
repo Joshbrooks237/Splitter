@@ -5,7 +5,7 @@
 ║                                                                               ║
 ║  Powered by Demucs - The open-source audio separation engine from Meta       ║
 ║                                                                               ║
-║  Pricing: 2 free songs → $40 once → Unlimited forever                        ║
+║  Pricing: 2 free songs → $30 once → Unlimited forever                        ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -1212,7 +1212,7 @@ def static_files(filename):
 @app.route("/api/checkout", methods=["POST"])
 def checkout():
     """
-    Create a Stripe Checkout session for the $40 one-time payment.
+    Create a Stripe Checkout session for the $30 one-time payment.
     Returns the checkout URL to redirect the user to.
     """
     try:
