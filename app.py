@@ -695,6 +695,7 @@ def test_ytdlp():
             sys.executable, "-m", "yt_dlp",
             "--dump-json",
             "--no-download",
+            "--no-playlist",
             "--no-warnings",
             "--socket-timeout", "15",
             test_url
@@ -971,8 +972,9 @@ def url_info():
             sys.executable, "-m", "yt_dlp",
             "--dump-json",
             "--no-download",
+            "--no-playlist",  # Only get single video, not entire playlist
             "--no-warnings",
-            "--socket-timeout", "30",
+            "--socket-timeout", "20",
             url
         ]
         
@@ -1079,6 +1081,7 @@ def separate_url():
             "--audio-format", "mp3",
             "--audio-quality", "192K",
             "--output", output_template + ".%(ext)s",
+            "--no-playlist",  # Only download single video, not entire playlist
             "--no-warnings",
             "--socket-timeout", "60",
             "--retries", "3",
