@@ -40,7 +40,6 @@ except Exception:
 from licensing import (
     init_licensing, db, 
     get_or_create_device, require_processing_rights,
-    create_checkout_session, handle_successful_payment, process_webhook_event,
     activate_license_for_device, License,
     FREE_TRIAL_SONGS, PRODUCT_PRICE_USD
 )
@@ -1239,31 +1238,6 @@ def payment_success():
     return render_template("success.html", license_key=license_key)
 
 
-@app.route("/api/verify-payment", methods=["POST"])
-def verify_payment():
-    """
-    Verify a payment session and return the license key.
-    Called by frontend after redirect from Stripe.
-    """
-    data = request.get_json()
-    session_id = data.get('session_id')
-    
-    if not session_id:
-        return jsonify({"error": "No session ID provided"}), 400
-    
-    success, result = handle_successful_payment(session_id)
-    
-    if success:
-        return jsonify({
-            "success": True,
-            "license_key": result,
-            "message": "Payment successful! Your license key is ready."
-        })
-    else:
-        return jsonify({
-            "success": False,
-            "error": result
-        }), 400
 
 
 @app.route("/api/claim-license", methods=["POST"])
@@ -1344,20 +1318,6 @@ def activate_license():
         }), 400
 
 
-@app.route("/api/webhook/stripe", methods=["POST"])
-def stripe_webhook():
-    """
-    Stripe webhook endpoint for payment events.
-    """
-    payload = request.get_data()
-    sig_header = request.headers.get('Stripe-Signature')
-    
-    try:
-        event_type = process_webhook_event(payload, sig_header)
-        return jsonify({"received": True, "type": event_type})
-    
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/license-status")
