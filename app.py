@@ -1212,26 +1212,14 @@ def static_files(filename):
 @app.route("/api/checkout", methods=["POST"])
 def checkout():
     """
-    Create a Stripe Checkout session for the $30 one-time payment.
-    Returns the checkout URL to redirect the user to.
+    Return the pre-built Stripe payment link for the $30 one-time payment.
     """
-    try:
-        # Build success/cancel URLs
-        base_url = request.host_url.rstrip('/')
-        success_url = f"{base_url}/success"
-        cancel_url = f"{base_url}/"
-        
-        session = create_checkout_session(success_url, cancel_url)
-        
-        return jsonify({
-            "checkout_url": session.url,
-            "session_id": session.id
-        })
-    
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 500
-    except Exception as e:
-        return jsonify({"error": f"Payment error: {str(e)}"}), 500
+    # Use the pre-built Stripe payment link provided by the user
+    checkout_url = "https://buy.stripe.com/test_5kQ9AS8ijdL64i99Cf5sA00"
+
+    return jsonify({
+        "checkout_url": checkout_url
+    })
 
 
 @app.route("/success")
@@ -1278,6 +1266,53 @@ def verify_payment():
         }), 400
 
 
+@app.route("/api/claim-license", methods=["POST"])
+def claim_license():
+    """
+    Claim a license after successful payment.
+    Generates and activates a new license key.
+    """
+    data = request.get_json()
+    email = data.get('email', '').strip()
+
+    if not email:
+        return jsonify({"error": "Email address is required"}), 400
+
+    try:
+        # Generate new license
+        license_key = License.generate_key()
+
+        # Create license record (already active since payment completed)
+        license = License(
+            key=license_key,
+            email=email,
+            is_active=True
+        )
+        db.session.add(license)
+
+        # Create transaction record for tracking
+        transaction = Transaction(
+            license_key=license_key,
+            amount_cents=PRODUCT_PRICE_USD,
+            currency='usd',
+            status='completed'
+        )
+        db.session.add(transaction)
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "license_key": license_key,
+            "message": "License created and activated successfully"
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"License claim failed: {str(e)}")
+        return jsonify({"error": "Failed to create license"}), 500
+
+
 @app.route("/api/activate-license", methods=["POST"])
 def activate_license():
     """
@@ -1285,13 +1320,13 @@ def activate_license():
     """
     data = request.get_json()
     license_key = data.get('license_key', '').strip().upper()
-    
+
     if not license_key:
         return jsonify({"error": "No license key provided"}), 400
-    
+
     device = get_or_create_device()
     success, message = activate_license_for_device(device, license_key)
-    
+
     if success:
         return jsonify({
             "success": True,

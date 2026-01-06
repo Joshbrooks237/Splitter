@@ -177,11 +177,24 @@
         <p class="subtitle">Welcome to the unlimited club</p>
         
         <div class="license-box">
-            <div class="license-label">Your License Key</div>
-            <div class="license-key" id="licenseKey" onclick="copyLicense()">
-                {{ license_key or 'XXXX-XXXX-XXXX-XXXX' }}
+            <div class="license-label">Claim Your License</div>
+            <div id="licenseSection">
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Enter the email you used for payment to activate your license:
+                </p>
+                <input type="email" id="emailInput" placeholder="your.email@example.com"
+                       style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; background: rgba(255,255,255,0.1); border: 1px solid var(--accent-primary); border-radius: 6px; color: white; font-family: var(--font-mono);">
+                <button onclick="claimLicense()" style="width: 100%; padding: 0.75rem; background: var(--accent-primary); border: none; border-radius: 6px; color: var(--bg-primary); font-family: var(--font-display); font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                    ACTIVATE LICENSE
+                </button>
+                <div id="claimStatus" style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary);"></div>
             </div>
-            <div class="copy-hint" id="copyHint">Click to copy</div>
+            <div id="licenseKeySection" style="display: none;">
+                <div class="license-key" id="licenseKey" onclick="copyLicense()">
+                    <!-- License key will be inserted here -->
+                </div>
+                <div class="copy-hint" id="copyHint">Click to copy</div>
+            </div>
         </div>
         
         <ul class="features">
@@ -209,8 +222,55 @@
                 }, 2000);
             });
         }
-        
-        // Auto-activate license for this device
+
+        async function claimLicense() {
+            const email = document.getElementById('emailInput').value.trim();
+            const statusDiv = document.getElementById('claimStatus');
+
+            if (!email) {
+                statusDiv.textContent = 'Please enter your email address';
+                statusDiv.style.color = '#ff6b6b';
+                return;
+            }
+
+            statusDiv.textContent = 'Generating license...';
+            statusDiv.style.color = 'var(--text-secondary)';
+
+            try {
+                const response = await fetch('/api/claim-license', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    // Show license key
+                    document.getElementById('licenseSection').style.display = 'none';
+                    document.getElementById('licenseKeySection').style.display = 'block';
+                    document.getElementById('licenseKey').textContent = result.license_key;
+
+                    // Auto-activate for this device
+                    await fetch('/api/activate-license', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ license_key: result.license_key })
+                    });
+
+                    statusDiv.textContent = 'License activated successfully!';
+                    statusDiv.style.color = 'var(--accent-primary)';
+                } else {
+                    statusDiv.textContent = result.error || 'Failed to claim license';
+                    statusDiv.style.color = '#ff6b6b';
+                }
+            } catch (error) {
+                statusDiv.textContent = 'Network error. Please try again.';
+                statusDiv.style.color = '#ff6b6b';
+            }
+        }
+
+        // Auto-activate license for this device (legacy support)
         {% if license_key %}
         fetch('/api/activate-license', {
             method: 'POST',
@@ -221,5 +281,6 @@
     </script>
 </body>
 </html>
+
 
 
