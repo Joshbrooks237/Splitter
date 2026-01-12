@@ -5,7 +5,7 @@
 ║                                                                               ║
 ║  Powered by Demucs - The open-source audio separation engine from Meta       ║
 ║                                                                               ║
-║  Pricing: 2 free songs → $30 once → Unlimited forever                        ║
+║  Pricing: 2 free songs → $5 once → Unlimited forever                         ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -1211,9 +1211,9 @@ def static_files(filename):
 @app.route("/api/checkout", methods=["POST"])
 def checkout():
     """
-    Return the pre-built Stripe payment link for the $30 one-time payment.
+    Return the pre-built Stripe payment link for the $5 one-time payment.
     """
-    # Use the pre-built Stripe payment link provided by the user
+    # Use the pre-built Stripe payment link for $5 - UPDATE THIS LINK in Stripe dashboard!
     checkout_url = "https://buy.stripe.com/test_5kQ9AS8ijdL64i99Cf5sA00"
 
     return jsonify({

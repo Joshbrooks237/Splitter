@@ -22,7 +22,7 @@ db = SQLAlchemy()
 
 # Configuration
 FREE_TRIAL_SONGS = 2
-PRODUCT_PRICE_USD = 3000  # $30.00 in cents
+PRODUCT_PRICE_USD = 500  # $5.00 in cents
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -189,7 +189,7 @@ def require_processing_rights(f):
         if not device.can_process:
             return jsonify({
                 "error": "Trial expired",
-                "message": "You've used your 2 free songs. Upgrade to unlimited for $30!",
+                "message": "You've used your 2 free songs. Upgrade to unlimited for $5!",
                 "trial_expired": True,
                 "songs_processed": device.songs_processed,
                 "upgrade_url": "/api/checkout"
