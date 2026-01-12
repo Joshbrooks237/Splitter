@@ -1213,8 +1213,8 @@ def checkout():
     """
     Return the pre-built Stripe payment link for the $5 one-time payment.
     """
-    # Use the pre-built Stripe payment link for $5 - UPDATE THIS LINK in Stripe dashboard!
-    checkout_url = "https://buy.stripe.com/test_5kQ9AS8ijdL64i99Cf5sA00"
+    # Use the pre-built Stripe payment link for $5
+    checkout_url = "https://buy.stripe.com/28E9ASeFxeY024m39i8ww00"
 
     return jsonify({
         "checkout_url": checkout_url
