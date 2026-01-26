@@ -359,6 +359,11 @@ class StemSplitter {
             if (data.license) {
                 this.licenseInfo = data.license;
                 this.updateLicenseUI();
+                
+                // If trial just ended (0 songs remaining), show upgrade modal
+                if (data.license.is_trial && data.license.songs_remaining === 0) {
+                    setTimeout(() => this.showUpgradeModal(), 500);
+                }
             }
             
             console.log('🎛️ System Status:', data);
@@ -425,8 +430,14 @@ class StemSplitter {
                     💳 Pay with Card
                 </button>
                 
+                <p style="text-align: center; color: var(--accent-secondary); margin: 1rem 0; font-size: 0.9rem;">OR</p>
+                
+                <button class="btn-checkout" onclick="window.stemSplitter.showClaimLicenseModal()" style="background: var(--accent-secondary);">
+                    🔑 I ALREADY PAID - Claim License
+                </button>
+                
                 <div class="license-input-section">
-                    <p>Already have a license key?</p>
+                    <p>Or enter your license key directly:</p>
                     <div class="license-input-row">
                         <input type="text" id="licenseKeyInput" placeholder="XXXX-XXXX-XXXX-XXXX">
                         <button onclick="window.stemSplitter.activateLicense()">Activate</button>
@@ -488,6 +499,77 @@ class StemSplitter {
             }
         } catch (error) {
             this.showError('Activation error: ' + error.message);
+        }
+    }
+    
+    showClaimLicenseModal() {
+        // Create claim license modal
+        const modal = document.createElement('div');
+        modal.className = 'upgrade-modal';
+        modal.innerHTML = `
+            <div class="upgrade-modal-content">
+                <button class="modal-close" onclick="this.closest('.upgrade-modal').remove()">✕</button>
+                <h2>🔑 CLAIM LICENSE</h2>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    Enter the email you used for payment:
+                </p>
+                <input type="email" id="claimEmailInput" placeholder="your.email@example.com"
+                       style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; background: rgba(255,255,255,0.1); border: 1px solid var(--accent-primary); border-radius: 6px; color: white; font-family: var(--font-mono);">
+                <button onclick="window.stemSplitter.claimLicenseFromModal()" style="width: 100%; padding: 0.75rem; background: var(--accent-primary); border: none; border-radius: 6px; color: var(--bg-primary); font-family: var(--font-display); font-weight: 700; cursor: pointer;">
+                    ACTIVATE LICENSE
+                </button>
+                <div id="claimStatus" style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary);"></div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        document.getElementById('claimEmailInput').focus();
+    }
+    
+    async claimLicenseFromModal() {
+        const email = document.getElementById('claimEmailInput').value.trim();
+        const statusDiv = document.getElementById('claimStatus');
+        
+        if (!email) {
+            statusDiv.textContent = '⚠️ Please enter your email address';
+            statusDiv.style.color = '#ff6b6b';
+            return;
+        }
+        
+        statusDiv.textContent = '🔄 Generating license...';
+        statusDiv.style.color = 'var(--text-secondary)';
+        
+        try {
+            const response = await this.apiCall('/api/claim-license', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                // Activate the license
+                await this.apiCall('/api/activate-license', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ license_key: result.license_key })
+                });
+                
+                statusDiv.textContent = '✅ License activated! Reloading...';
+                statusDiv.style.color = 'var(--accent-primary)';
+                
+                // Refresh the page to show the new license status
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                statusDiv.textContent = '❌ ' + (result.error || 'Failed to claim license');
+                statusDiv.style.color = '#ff6b6b';
+            }
+        } catch (error) {
+            statusDiv.textContent = '❌ Network error. Please try again.';
+            statusDiv.style.color = '#ff6b6b';
         }
     }
     
