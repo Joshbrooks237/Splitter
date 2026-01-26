@@ -364,6 +364,11 @@ class StemSplitter {
                 if (data.license.is_trial && data.license.songs_remaining === 0) {
                     setTimeout(() => this.showUpgradeModal(), 500);
                 }
+                
+                // If still on trial but close to running out, show subtle banner
+                if (data.license.is_trial && data.license.songs_remaining === 1) {
+                    this.showTrialWarning(data.license.songs_remaining);
+                }
             }
             
             console.log('🎛️ System Status:', data);
@@ -373,6 +378,34 @@ class StemSplitter {
             const statusText = this.deviceStatus.querySelector('.status-text');
             statusText.textContent = 'Offline';
         }
+    }
+    
+    showTrialWarning(remaining) {
+        // Show warning when 1 song remaining
+        const warning = document.createElement('div');
+        warning.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #ff9500, #ff6b6b);
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            z-index: 999;
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.3);
+            animation: slideDown 0.3s ease;
+        `;
+        warning.innerHTML = `
+            ⚠️ Last free song remaining! 
+            <button onclick="window.stemSplitter.showUpgradeModal()" style="margin-left: 1rem; padding: 0.5rem 1rem; background: white; color: #ff6b6b; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                UPGRADE NOW
+            </button>
+        `;
+        document.body.appendChild(warning);
+        
+        setTimeout(() => warning.remove(), 10000);
     }
     
     updateLicenseUI() {
@@ -435,6 +468,9 @@ class StemSplitter {
                 <button class="btn-checkout" onclick="window.stemSplitter.showClaimLicenseModal()" style="background: var(--accent-secondary);">
                     🔑 I ALREADY PAID - Claim License
                 </button>
+                <p style="text-align: center; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                    ✓ Just paid? Click here to activate your license!
+                </p>
                 
                 <div class="license-input-section">
                     <p>Or enter your license key directly:</p>
