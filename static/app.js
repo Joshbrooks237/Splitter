@@ -42,8 +42,10 @@ class StemSplitter {
     
     // Helper to send API requests with device ID and credentials
     async apiCall(endpoint, options = {}) {
-        const headers = options.headers || {};
-        headers['X-Device-ID'] = this.deviceId;
+        const headers = {
+            'X-Device-ID': this.deviceId,
+            ...(options.headers || {})  // Merge in any provided headers
+        };
         
         const response = await fetch(endpoint, {
             ...options,
@@ -692,8 +694,10 @@ class StemSplitter {
                     formData.append('sample_rate', options.sampleRate);
                 }
                 
+                // Don't set Content-Type header for FormData - browser will set it automatically
                 const response = await this.apiCall('/api/separate', {
                     method: 'POST',
+                    headers: {},  // Let browser set Content-Type for FormData
                     body: formData
                 });
                 
