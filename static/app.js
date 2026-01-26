@@ -141,7 +141,20 @@ class StemSplitter {
         }
         
         // Process button
-        this.processBtn.addEventListener('click', () => this.startProcessing());
+        if (this.processBtn) {
+            this.processBtn.addEventListener('click', () => {
+                console.log('🎵 Process button clicked!', {
+                    inputMode: this.inputMode,
+                    selectedFile: this.selectedFile ? this.selectedFile.name : null,
+                    selectedUrl: this.selectedUrl,
+                    buttonDisabled: this.processBtn.disabled
+                });
+                this.startProcessing();
+            });
+            console.log('✅ Process button event listener attached');
+        } else {
+            console.error('❌ Process button not found!');
+        }
         
         // Results actions
         this.downloadAllBtn.addEventListener('click', () => this.downloadAllStems());
@@ -557,9 +570,11 @@ class StemSplitter {
         }
         
         this.selectedFile = file;
+        console.log('✅ File selected:', file.name, { size: file.size, type: file.type });
         this.showFileInfo();
         this.drawWaveformPlaceholder();
         this.processBtn.disabled = false;
+        console.log('✅ Process button enabled:', { disabled: this.processBtn.disabled });
     }
     
     showFileInfo() {
