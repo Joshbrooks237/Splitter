@@ -1221,6 +1221,17 @@ def checkout():
     })
 
 
+def handle_successful_payment(session_id):
+    """
+    Handle successful Stripe payment.
+    For now, just returns True since we're using pre-built payment links.
+    The actual license activation happens when user claims license on the success page.
+    """
+    # TODO: Verify with Stripe API using session_id if needed
+    # For now, we trust the redirect from Stripe
+    return True, None
+
+
 @app.route("/success")
 def payment_success():
     """

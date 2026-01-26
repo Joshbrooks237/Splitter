@@ -237,10 +237,23 @@
             statusDiv.style.color = 'var(--text-secondary)';
 
             try {
+                // Get device ID from localStorage (same as main app)
+                const DEVICE_ID_KEY = 'stem_splitter_device_id';
+                let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+                
+                if (!deviceId) {
+                    deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem(DEVICE_ID_KEY, deviceId);
+                }
+
                 const response = await fetch('/api/claim-license', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email })
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Device-ID': deviceId
+                    },
+                    body: JSON.stringify({ email: email }),
+                    credentials: 'include'
                 });
 
                 const result = await response.json();
@@ -254,8 +267,12 @@
                     // Auto-activate for this device
                     await fetch('/api/activate-license', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ license_key: result.license_key })
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-Device-ID': deviceId
+                        },
+                        body: JSON.stringify({ license_key: result.license_key }),
+                        credentials: 'include'
                     });
 
                     statusDiv.textContent = 'License activated successfully!';
@@ -272,11 +289,25 @@
 
         // Auto-activate license for this device (legacy support)
         {% if license_key %}
-        fetch('/api/activate-license', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ license_key: '{{ license_key }}' })
-        });
+        (async function() {
+            const DEVICE_ID_KEY = 'stem_splitter_device_id';
+            let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+            
+            if (!deviceId) {
+                deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                localStorage.setItem(DEVICE_ID_KEY, deviceId);
+            }
+
+            await fetch('/api/activate-license', {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-Device-ID': deviceId
+                },
+                body: JSON.stringify({ license_key: '{{ license_key }}' }),
+                credentials: 'include'
+            });
+        })();
         {% endif %}
     </script>
 </body>
