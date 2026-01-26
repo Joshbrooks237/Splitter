@@ -40,7 +40,7 @@ except Exception:
 from licensing import (
     init_licensing, db, 
     get_or_create_device, require_processing_rights,
-    activate_license_for_device, License,
+    activate_license_for_device, License, Transaction,
     FREE_TRIAL_SONGS, PRODUCT_PRICE_USD
 )
 
@@ -1294,8 +1294,15 @@ def claim_license():
 
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f"License claim failed: {str(e)}")
-        return jsonify({"error": "Failed to create license"}), 500
+        error_msg = f"License claim failed: {str(e)}"
+        app.logger.error(error_msg)
+        print(f"❌ {error_msg}")  # Also print to console
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": "Failed to create license",
+            "details": str(e)  # Include error details in response
+        }), 500
 
 
 @app.route("/api/activate-license", methods=["POST"])
