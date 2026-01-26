@@ -22,6 +22,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import torch
 import torchaudio
+import stripe
 
 # Configure torchaudio backend for container compatibility
 try:
@@ -40,7 +41,7 @@ except Exception:
 from licensing import (
     init_licensing, db, 
     get_or_create_device, require_processing_rights,
-    activate_license_for_device, License, Transaction,
+    activate_license_for_device, License, Transaction, Device,
     FREE_TRIAL_SONGS, PRODUCT_PRICE_USD
 )
 
@@ -49,6 +50,13 @@ from worker import Job, start_job, get_job
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "stem-splitter-dev-key-change-in-prod")
+
+# Initialize Stripe
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "pk_test_placeholder")
+
+# Get deployment domain
+DEPLOYMENT_URL = os.getenv("DEPLOYMENT_URL", "http://localhost:8080")
 
 # Configure CORS properly for Railway deployment
 CORS(app, resources={
@@ -1211,42 +1219,151 @@ def static_files(filename):
 @app.route("/api/checkout", methods=["POST"])
 def checkout():
     """
-    Return the pre-built Stripe payment link for the $5 one-time payment.
+    Create a Stripe Checkout Session for $5 one-time payment.
+    Returns session ID so frontend can redirect to Stripe.
     """
-    # Use the pre-built Stripe payment link for $5
-    checkout_url = "https://buy.stripe.com/28E9ASeFxeY024m39i8ww00"
-
-    return jsonify({
-        "checkout_url": checkout_url
-    })
+    try:
+        # Get device to link payment to
+        device = get_or_create_device()
+        
+        # Create Stripe Checkout Session
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[
+                {
+                    'price_data': {
+                        'currency': 'usd',
+                        'product_data': {
+                            'name': 'STEM SPLITTER - Unlimited License',
+                            'description': 'One-time payment for unlimited audio stem separation',
+                        },
+                        'unit_amount': 500,  # $5.00 in cents
+                    },
+                    'quantity': 1,
+                }
+            ],
+            mode='payment',
+            success_url=f'{DEPLOYMENT_URL}/success?session_id={{CHECKOUT_SESSION_ID}}',
+            cancel_url=f'{DEPLOYMENT_URL}/',
+            metadata={
+                'device_fingerprint': device.fingerprint if device else 'unknown',
+            }
+        )
+        
+        return jsonify({
+            "sessionId": checkout_session.id,
+            "publishableKey": STRIPE_PUBLISHABLE_KEY
+        })
+        
+    except stripe.error.StripeError as e:
+        print(f"❌ Stripe error: {str(e)}")
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        print(f"❌ Checkout error: {str(e)}")
+        return jsonify({"error": "Failed to create checkout session"}), 500
 
 
 def handle_successful_payment(session_id):
     """
-    Handle successful Stripe payment.
-    For now, just returns True since we're using pre-built payment links.
-    The actual license activation happens when user claims license on the success page.
+    Verify Stripe payment and create license for device.
+    Returns (success, license_key)
     """
-    # TODO: Verify with Stripe API using session_id if needed
-    # For now, we trust the redirect from Stripe
-    return True, None
+    try:
+        # Retrieve the Stripe checkout session
+        checkout_session = stripe.checkout.Session.retrieve(session_id)
+        
+        # Verify payment was successful
+        if checkout_session.payment_status != 'paid':
+            print(f"❌ Payment not completed for session {session_id}")
+            return False, None
+        
+        # Get device by fingerprint from metadata
+        device_fingerprint = checkout_session.metadata.get('device_fingerprint')
+        if not device_fingerprint:
+            print(f"❌ No device fingerprint in metadata for session {session_id}")
+            return False, None
+        
+        device = Device.query.filter_by(fingerprint=device_fingerprint).first()
+        if not device:
+            print(f"❌ Device not found for fingerprint {device_fingerprint}")
+            return False, None
+        
+        # Check if device already has a license
+        if device.license_key:
+            print(f"✅ Device already licensed: {device.license_key}")
+            return True, device.license_key
+        
+        # Generate new license
+        license_key = License.generate_key()
+        
+        # Create license record
+        license = License(
+            key=license_key,
+            is_active=True,
+            stripe_payment_intent=checkout_session.payment_intent
+        )
+        db.session.add(license)
+        
+        # Link device to license
+        device.license_key = license_key
+        
+        # Create transaction record
+        transaction = Transaction(
+            license_key=license_key,
+            stripe_session_id=session_id,
+            stripe_payment_intent=checkout_session.payment_intent,
+            amount_cents=PRODUCT_PRICE_USD,
+            currency='usd',
+            status='completed'
+        )
+        db.session.add(transaction)
+        db.session.commit()
+        
+        print(f"✅ License created and activated: {license_key}")
+        return True, license_key
+        
+    except stripe.error.StripeError as e:
+        print(f"❌ Stripe error in handle_successful_payment: {str(e)}")
+        db.session.rollback()
+        return False, None
+    except Exception as e:
+        print(f"❌ Error verifying payment: {str(e)}")
+        traceback.print_exc()
+        db.session.rollback()
+        return False, None
 
 
 @app.route("/success")
 def payment_success():
     """
-    Payment success page - verify payment and show license key.
+    Auto-verify Stripe payment and unlock license.
+    If payment verified, redirects to main app with license activated.
+    If not verified, shows manual claim form as fallback.
     """
     session_id = request.args.get('session_id')
-    license_key = request.args.get('license_key')
+    license_key = None
+    auto_verified = False
     
     if session_id:
-        # Verify the payment
+        # Try to auto-verify payment with Stripe
+        print(f"🔍 Verifying Stripe session: {session_id}")
         success, result = handle_successful_payment(session_id)
         if success:
             license_key = result
+            auto_verified = True
+            print(f"✅ Payment auto-verified! License: {license_key}")
+            
+            # Redirect to main app with success message
+            return render_template("success.html", 
+                                   license_key=license_key, 
+                                   auto_verified=True)
+        else:
+            print(f"⚠️ Could not auto-verify payment for session {session_id}")
     
-    return render_template("success.html", license_key=license_key)
+    # Fallback: show manual claim form
+    return render_template("success.html", 
+                           license_key=license_key, 
+                           auto_verified=False)
 
 
 

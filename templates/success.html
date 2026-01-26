@@ -178,20 +178,36 @@
         
         <div class="license-box">
             <div class="license-label">Claim Your License</div>
-            <div id="licenseSection">
-                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
-                    ⚠️ <strong>Important:</strong> If you don't see this page after payment, just enter the email you used to pay below to activate your license.
-                </p>
-                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
-                    Enter the email you used for payment to activate your license:
-                </p>
-                <input type="email" id="emailInput" placeholder="your.email@example.com"
-                       style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; background: rgba(255,255,255,0.1); border: 1px solid var(--accent-primary); border-radius: 6px; color: white; font-family: var(--font-mono);">
-                <button onclick="claimLicense()" style="width: 100%; padding: 0.75rem; background: var(--accent-primary); border: none; border-radius: 6px; color: var(--bg-primary); font-family: var(--font-display); font-weight: 700; cursor: pointer; transition: all 0.2s;">
-                    ACTIVATE LICENSE
-                </button>
-                <div id="claimStatus" style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary);"></div>
-            </div>
+            {% if auto_verified and license_key %}
+                <!-- Auto-verified payment -->
+                <div id="licenseKeySection">
+                    <p style="color: var(--accent-primary); margin-bottom: 1rem; font-size: 1rem; font-weight: bold;">
+                        ✓ Payment verified! Your license has been activated.
+                    </p>
+                    <div class="license-key" id="licenseKey" onclick="copyLicense()">{{ license_key }}</div>
+                    <div class="copy-hint" id="copyHint">Click to copy</div>
+                    <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.85rem;">
+                        Enjoy unlimited access! Return to the app to start splitting.
+                    </p>
+                </div>
+            {% else %}
+                <!-- Fallback: manual claim form -->
+                <div id="licenseSection">
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                        ⚠️ <strong>Important:</strong> If you don't see this page after payment, just enter the email you used to pay below to activate your license.
+                    </p>
+                    <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                        Enter the email you used for payment to activate your license:
+                    </p>
+                    <input type="email" id="emailInput" placeholder="your.email@example.com"
+                           style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; background: rgba(255,255,255,0.1); border: 1px solid var(--accent-primary); border-radius: 6px; color: white; font-family: var(--font-mono);">
+                    <button onclick="claimLicense()" style="width: 100%; padding: 0.75rem; background: var(--accent-primary); border: none; border-radius: 6px; color: var(--bg-primary); font-family: var(--font-display); font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                        ACTIVATE LICENSE
+                    </button>
+                    <div id="claimStatus" style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary);"></div>
+                </div>
+                <div id="licenseKeySection" style="display: none;"></div>
+            {% endif %}
             <div id="licenseKeySection" style="display: none;">
                 <div class="license-key" id="licenseKey" onclick="copyLicense()">
                     <!-- License key will be inserted here -->

@@ -492,14 +492,34 @@ class StemSplitter {
             const response = await this.apiCall('/api/checkout', { method: 'POST' });
             const data = await response.json();
             
-            if (data.checkout_url) {
-                window.location.href = data.checkout_url;
+            if (data.error) {
+                this.showError(data.error);
+                return;
+            }
+            
+            // Load Stripe
+            if (!window.Stripe) {
+                const script = document.createElement('script');
+                script.src = 'https://js.stripe.com/v3/';
+                script.onload = () => this.redirectToStripe(data);
+                document.head.appendChild(script);
             } else {
-                this.showError(data.error || 'Failed to start checkout');
+                this.redirectToStripe(data);
             }
         } catch (error) {
-            this.showError('Payment error: ' + error.message);
+            this.showError('Failed to start checkout: ' + error.message);
         }
+    }
+    
+    redirectToStripe(checkoutData) {
+        // Redirect to Stripe Checkout
+        const stripe = Stripe(checkoutData.publishableKey);
+        stripe.redirectToCheckout({ sessionId: checkoutData.sessionId })
+            .then(result => {
+                if (result.error) {
+                    this.showError(result.error.message);
+                }
+            });
     }
     
     async activateLicense() {
