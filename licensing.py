@@ -133,9 +133,17 @@ class Transaction(db.Model):
 
 def get_device_fingerprint():
     """
-    Generate a device fingerprint from request headers.
-    This is a simple implementation - can be enhanced with JS fingerprinting.
+    Get device fingerprint from client-side persistent ID (localStorage).
+    Falls back to generating from request headers if not provided.
     """
+    # Try to get client-provided device ID from request (header or query param)
+    device_id = request.headers.get('X-Device-ID') or request.args.get('device_id')
+    
+    if device_id:
+        # Use the client-provided persistent ID
+        return hashlib.sha256(device_id.encode()).hexdigest()
+    
+    # Fallback: Generate from headers (for backward compatibility)
     components = [
         request.headers.get('User-Agent', ''),
         request.headers.get('Accept-Language', ''),

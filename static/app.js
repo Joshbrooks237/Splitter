@@ -12,14 +12,45 @@ class StemSplitter {
         this.jobId = null;
         this.stemsData = null;
         this.licenseInfo = null;
+        this.deviceId = this.getOrCreateDeviceId();  // Persistent device ID
         
         this.init();
+    }
+    
+    getOrCreateDeviceId() {
+        /**
+         * Generate a persistent device ID stored in localStorage.
+         * This ensures the free trial countdown persists across browser refreshes.
+         */
+        const DEVICE_ID_KEY = 'stem_splitter_device_id';
+        let deviceId = localStorage.getItem(DEVICE_ID_KEY);
+        
+        if (!deviceId) {
+            // Generate a new UUID-like ID if it doesn't exist
+            deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem(DEVICE_ID_KEY, deviceId);
+        }
+        
+        return deviceId;
     }
     
     init() {
         this.cacheDOM();
         this.bindEvents();
         this.checkSystemStatus();
+    }
+    
+    // Helper to send API requests with device ID
+    async apiCall(endpoint, options = {}) {
+        const headers = options.headers || {};
+        headers['X-Device-ID'] = this.deviceId;
+        
+        const response = await fetch(endpoint, {
+            ...options,
+            headers
+        });
+        
+        return response;
     }
     
     cacheDOM() {
@@ -221,7 +252,7 @@ class StemSplitter {
         }
         
         try {
-            const response = await fetch('/api/url-info', {
+            const response = await this.apiCall('/api/url-info', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
@@ -293,7 +324,7 @@ class StemSplitter {
     
     async checkSystemStatus() {
         try {
-            const response = await fetch('/api/info');
+            const response = await this.apiCall('/api/info');
             const data = await response.json();
             
             const statusDot = this.deviceStatus.querySelector('.status-dot');
@@ -389,7 +420,7 @@ class StemSplitter {
     
     async startCheckout() {
         try {
-            const response = await fetch('/api/checkout', { method: 'POST' });
+            const response = await this.apiCall('/api/checkout', { method: 'POST' });
             const data = await response.json();
             
             if (data.checkout_url) {
@@ -412,7 +443,7 @@ class StemSplitter {
         }
         
         try {
-            const response = await fetch('/api/activate-license', {
+            const response = await this.apiCall('/api/activate-license', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ license_key: key })
@@ -625,7 +656,7 @@ class StemSplitter {
                 // URL mode - send JSON
                 this.updateProcessingStatus('Downloading audio from URL...');
                 
-                const response = await fetch('/api/separate-url', {
+                const response = await this.apiCall('/api/separate-url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -660,7 +691,7 @@ class StemSplitter {
                     formData.append('sample_rate', options.sampleRate);
                 }
                 
-                const response = await fetch('/api/separate', {
+                const response = await this.apiCall('/api/separate', {
                     method: 'POST',
                     body: formData
                 });
@@ -709,7 +740,7 @@ class StemSplitter {
             attempts++;
             
             try {
-                const response = await fetch(`/api/job/${jobId}`);
+                const response = await this.apiCall(`/api/job/${jobId}`);
                 const job = await response.json();
                 
                 console.log(`📊 Job ${jobId} status: ${job.status} (${job.progress}%)`);
@@ -938,7 +969,7 @@ class StemSplitter {
         // Cleanup server-side files
         if (this.jobId) {
             try {
-                await fetch(`/api/cleanup/${this.jobId}`, { method: 'POST' });
+                await this.apiCall(`/api/cleanup/${this.jobId}`, { method: 'POST' });
             } catch (e) {
                 console.warn('Cleanup failed:', e);
             }
