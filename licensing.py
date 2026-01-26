@@ -133,21 +133,32 @@ class Transaction(db.Model):
 
 def get_device_fingerprint():
     """
-    Get device fingerprint from client-side persistent ID (localStorage).
-    Falls back to generating from request headers if not provided.
+    Get device fingerprint from multiple sources for maximum persistence:
+    1. Client-provided device ID (localStorage) - primary
+    2. Server-side session cookie - secondary (works in incognito)
+    3. HTTP headers - fallback
+    
+    This three-layer approach prevents trial reset in incognito mode.
     """
-    # Try to get client-provided device ID from request (header or query param)
-    device_id = request.headers.get('X-Device-ID') or request.args.get('device_id')
+    from flask import session as flask_session
+    
+    # Try to get client-provided device ID from request header
+    device_id = request.headers.get('X-Device-ID')
     
     if device_id:
         # Use the client-provided persistent ID
         return hashlib.sha256(device_id.encode()).hexdigest()
     
-    # Fallback: Generate from headers (for backward compatibility)
+    # Fallback: Use Flask session (works even in incognito with cookies)
+    if 'device_session_id' not in flask_session:
+        # Generate a new session-based device ID
+        flask_session['device_session_id'] = 'sess_' + secrets.token_hex(16)
+    
+    session_device_id = flask_session['device_session_id']
+    
+    # Combine session ID with IP for additional security
     components = [
-        request.headers.get('User-Agent', ''),
-        request.headers.get('Accept-Language', ''),
-        request.headers.get('Accept-Encoding', ''),
+        session_device_id,
         request.remote_addr or '',
     ]
     raw = '|'.join(components)

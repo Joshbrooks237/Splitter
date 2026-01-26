@@ -40,14 +40,15 @@ class StemSplitter {
         this.checkSystemStatus();
     }
     
-    // Helper to send API requests with device ID
+    // Helper to send API requests with device ID and credentials
     async apiCall(endpoint, options = {}) {
         const headers = options.headers || {};
         headers['X-Device-ID'] = this.deviceId;
         
         const response = await fetch(endpoint, {
             ...options,
-            headers
+            headers,
+            credentials: 'include'  // Always send cookies with requests
         });
         
         return response;
