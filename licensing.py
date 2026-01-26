@@ -14,7 +14,7 @@ import secrets
 import hashlib
 from datetime import datetime
 from functools import wraps
-from flask import request, jsonify
+from flask import request, jsonify, session
 from flask_sqlalchemy import SQLAlchemy
 
 # Initialize SQLAlchemy (will be bound to app later)
@@ -140,8 +140,6 @@ def get_device_fingerprint():
     
     This three-layer approach prevents trial reset in incognito mode.
     """
-    from flask import session as flask_session
-    
     # Try to get client-provided device ID from request header
     device_id = request.headers.get('X-Device-ID')
     
@@ -150,11 +148,12 @@ def get_device_fingerprint():
         return hashlib.sha256(device_id.encode()).hexdigest()
     
     # Fallback: Use Flask session (works even in incognito with cookies)
-    if 'device_session_id' not in flask_session:
+    if 'device_session_id' not in session:
         # Generate a new session-based device ID
-        flask_session['device_session_id'] = 'sess_' + secrets.token_hex(16)
+        session['device_session_id'] = 'sess_' + secrets.token_hex(16)
+        session.modified = True  # Force session to be saved
     
-    session_device_id = flask_session['device_session_id']
+    session_device_id = session['device_session_id']
     
     # Combine session ID with IP for additional security
     components = [
