@@ -109,7 +109,13 @@ class StemSplitter {
     bindEvents() {
         // Mode toggle
         if (this.fileModeBtn) {
-            this.fileModeBtn.addEventListener('click', () => this.setInputMode('file'));
+            this.fileModeBtn.addEventListener('click', () => {
+                this.setInputMode('file');
+                // Also open file picker when clicking the Upload File button
+                if (this.inputMode === 'file') {
+                    this.fileInput.click();
+                }
+            });
         }
         if (this.urlModeBtn) {
             this.urlModeBtn.addEventListener('click', () => this.setInputMode('url'));
