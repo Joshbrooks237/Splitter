@@ -180,6 +180,9 @@
             <div class="license-label">Claim Your License</div>
             <div id="licenseSection">
                 <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
+                    ⚠️ <strong>Important:</strong> If you don't see this page after payment, just enter the email you used to pay below to activate your license.
+                </p>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">
                     Enter the email you used for payment to activate your license:
                 </p>
                 <input type="email" id="emailInput" placeholder="your.email@example.com"
@@ -208,7 +211,13 @@
         <a href="/" class="btn-start">START SPLITTING →</a>
         
         <div class="save-reminder">
-            ⚠️ <strong>Save your license key!</strong> You'll need it to activate on other devices.
+            ⚠️ <strong>License key:</strong> Your unique key will be generated after activation. Save it to use on other devices!
+        </div>
+        
+        <div style="margin-top: 2rem; text-align: center;">
+            <p style="font-size: 0.8rem; color: var(--text-secondary);">
+                <a href="/" style="color: var(--accent-secondary); text-decoration: none; border-bottom: 1px solid var(--accent-secondary);">← Back to App</a>
+            </p>
         </div>
     </div>
     
@@ -277,6 +286,11 @@
 
                     statusDiv.textContent = 'License activated successfully!';
                     statusDiv.style.color = 'var(--accent-primary)';
+                    
+                    // Redirect to main app after 2 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 2000);
                 } else {
                     statusDiv.textContent = result.error || 'Failed to claim license';
                     statusDiv.style.color = '#ff6b6b';
