@@ -347,7 +347,16 @@ class StemSplitter {
     async checkSystemStatus() {
         try {
             const response = await this.apiCall('/api/info');
-            const data = await response.json();
+            const raw = await response.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (e) {
+                throw new Error(`Bad response (${response.status}): not JSON`);
+            }
+            if (!response.ok) {
+                throw new Error(data.error || `HTTP ${response.status}`);
+            }
             
             const statusDot = this.deviceStatus.querySelector('.status-dot');
             const statusText = this.deviceStatus.querySelector('.status-text');
@@ -496,30 +505,45 @@ class StemSplitter {
                 this.showError(data.error);
                 return;
             }
-            
-            // Load Stripe
-            if (!window.Stripe) {
-                const script = document.createElement('script');
-                script.src = 'https://js.stripe.com/v3/';
-                script.onload = () => this.redirectToStripe(data);
-                document.head.appendChild(script);
-            } else {
-                this.redirectToStripe(data);
+            if (!data.sessionId || !data.publishableKey) {
+                this.showError('Invalid checkout response from server');
+                return;
             }
+            
+            await this.loadStripeJs();
+            this.redirectToStripe(data);
         } catch (error) {
             this.showError('Failed to start checkout: ' + error.message);
         }
     }
     
+    loadStripeJs() {
+        return new Promise((resolve, reject) => {
+            if (window.Stripe) {
+                resolve();
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://js.stripe.com/v3/';
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Could not load Stripe (blocked network or ad blocker?)'));
+            document.head.appendChild(script);
+        });
+    }
+    
     redirectToStripe(checkoutData) {
-        // Redirect to Stripe Checkout
-        const stripe = Stripe(checkoutData.publishableKey);
-        stripe.redirectToCheckout({ sessionId: checkoutData.sessionId })
-            .then(result => {
-                if (result.error) {
-                    this.showError(result.error.message);
-                }
-            });
+        try {
+            const stripe = window.Stripe(checkoutData.publishableKey);
+            stripe.redirectToCheckout({ sessionId: checkoutData.sessionId })
+                .then(result => {
+                    if (result.error) {
+                        this.showError(result.error.message);
+                    }
+                });
+        } catch (e) {
+            this.showError('Stripe error: ' + e.message);
+        }
     }
     
     async activateLicense() {

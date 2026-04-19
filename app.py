@@ -55,27 +55,56 @@ app.secret_key = os.getenv("FLASK_SECRET_KEY", "stem-splitter-dev-key-change-in-
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_placeholder")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "pk_test_placeholder")
 
-# Get deployment domain
-DEPLOYMENT_URL = os.getenv("DEPLOYMENT_URL", "http://localhost:8080")
+def _public_base_url():
+    """Public URL for Stripe redirects (must be https in production)."""
+    url = (os.getenv("DEPLOYMENT_URL") or os.getenv("PUBLIC_URL") or
+           os.getenv("RAILWAY_PUBLIC_DOMAIN") or "").strip().rstrip("/")
+    if not url:
+        return "http://localhost:8080"
+    if not url.startswith("http"):
+        url = f"https://{url}"
+    return url
+
+
+DEPLOYMENT_URL = _public_base_url()
+
+_cors_origins = [
+    "http://localhost:8080",
+    "http://localhost:5000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5000",
+    "https://splitter-production-0a43.up.railway.app",
+    "https://stemsplitter.co",
+    "https://www.stemsplitter.co",
+]
+for _o in os.getenv("CORS_ORIGINS", "").split(","):
+    _o = _o.strip().rstrip("/")
+    if _o and _o not in _cors_origins:
+        _cors_origins.append(_o)
 
 # Configure CORS properly for Railway deployment
+# Note: supports_credentials=True cannot be combined with origins="*" in browsers.
+# X-Device-ID must be listed or preflight can fail for cross-origin / sub-domain setups.
 CORS(app, resources={
     r"/api/*": {
-        "origins": [
-            "http://localhost:8080",
-            "http://localhost:5000",
-            "http://127.0.0.1:8080",
-            "http://127.0.0.1:5000",
-            "https://splitter-production-0a43.up.railway.app",
-            "https://*.up.railway.app",
-            "*"  # Allow all for now - tighten in production
-        ],
+        "origins": _cors_origins,
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+        "allow_headers": [
+            "Content-Type", "Authorization", "X-Requested-With", "X-Device-ID",
+        ],
         "expose_headers": ["Content-Disposition", "Content-Length"],
         "supports_credentials": True
     }
 })
+
+
+@app.after_request
+def _no_store_api(res):
+    """Prevent CDN/browser caching personalized API responses."""
+    if request.path.startswith("/api/"):
+        res.headers["Cache-Control"] = "private, no-store, max-age=0"
+        res.headers["Vary"] = "Origin, Cookie"
+    return res
 
 # Initialize licensing/payment system
 init_licensing(app)
@@ -1295,14 +1324,16 @@ def handle_successful_payment(session_id):
         
         # Generate new license
         license_key = License.generate_key()
+        pi = checkout_session.payment_intent
+        pi_id = pi if isinstance(pi, str) else (getattr(pi, "id", None) if pi else None)
         
         # Create license record
-        license = License(
+        lic = License(
             key=license_key,
             is_active=True,
-            stripe_payment_intent=checkout_session.payment_intent
+            stripe_payment_intent=pi_id,
         )
-        db.session.add(license)
+        db.session.add(lic)
         
         # Link device to license
         device.license_key = license_key
@@ -1311,7 +1342,7 @@ def handle_successful_payment(session_id):
         transaction = Transaction(
             license_key=license_key,
             stripe_session_id=session_id,
-            stripe_payment_intent=checkout_session.payment_intent,
+            stripe_payment_intent=pi_id,
             amount_cents=PRODUCT_PRICE_USD,
             currency='usd',
             status='completed'
@@ -1496,6 +1527,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     
+    pub = DEPLOYMENT_URL[:48] if len(DEPLOYMENT_URL) <= 48 else DEPLOYMENT_URL[:45] + "..."
     print(f"""
     ╔═══════════════════════════════════════════════════════════════╗
     ║                     STEM SPLITTER                             ║
@@ -1503,6 +1535,7 @@ if __name__ == "__main__":
     ║                                                               ║
     ║  Device: {get_device().upper():.<48}║
     ║  Port: {port:<50}║
+    ║  Public: {pub:<48}║
     ║  Debug: {str(debug):<49}║
     ╚═══════════════════════════════════════════════════════════════╝
     """)
