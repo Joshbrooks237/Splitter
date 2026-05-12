@@ -31,6 +31,6 @@ uuid6==2024.1.12
 psutil==5.9.0
 
 # URL Audio Extraction (YouTube, SoundCloud, etc.)
-yt-dlp>=2026.3.3
+yt-dlp>=2026.3.17
 
 

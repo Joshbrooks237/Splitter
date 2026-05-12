@@ -16,6 +16,8 @@ import shutil
 import subprocess
 import traceback
 import time
+import base64
+import tempfile
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template, send_from_directory, url_for, session
 from flask_cors import CORS
@@ -724,41 +726,22 @@ def test_ytdlp():
     
     # Step 2: Try to fetch info from a known working URL
     try:
-        result["steps"].append("Testing URL extraction (Rick Astley - short timeout)...")
+        result["steps"].append("Testing URL extraction (Rick Astley, multi-profile fallback)...")
         test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         
-        cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "--dump-json",
-            "--no-download",
-            "--no-playlist",
-            "--no-warnings",
-            "--socket-timeout", "15",
-        ]
-        cmd.extend(_yt_dlp_extra_args_for_url(test_url))
-        cmd.append(test_url)
+        info, err = _yt_dlp_dump_json_with_fallbacks(test_url, per_attempt_timeout=25)
         
-        fetch = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if fetch.returncode == 0:
-            info = json_module.loads(fetch.stdout)
+        if info is not None:
             result["steps"].append(f"✅ Got info: {info.get('title', 'Unknown')}")
             result["test_title"] = info.get("title")
             result["test_duration"] = info.get("duration")
             result["success"] = True
         else:
-            result["steps"].append(f"❌ Extraction failed: {fetch.stderr[:200]}")
-            result["stderr"] = fetch.stderr[:500]
+            result["steps"].append(f"❌ Extraction failed: {(err or '')[:300]}")
+            result["stderr"] = (err or "")[:500]
             
     except subprocess.TimeoutExpired:
-        result["steps"].append("❌ Extraction timed out after 30s")
-    except json_module.JSONDecodeError as e:
-        result["steps"].append(f"❌ JSON parse error: {e}")
+        result["steps"].append("❌ Extraction timed out")
     except Exception as e:
         result["steps"].append(f"❌ Extraction error: {e}")
     
@@ -983,26 +966,146 @@ def test_demucs():
 # URL EXTRACTION ENDPOINTS (YouTube, SoundCloud, Bandcamp, etc.)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _yt_dlp_extra_args_for_url(url: str) -> list:
-    """
-    Extra yt-dlp CLI args to work around YouTube bot / geo blocks on server IPs.
-    Optional: set YTDLP_COOKIES_FILE to a Netscape cookies.txt path (advanced).
-    """
-    extras = []
+# Cookie file written once when using YTDLP_COOKIES_B64 (Railway-friendly).
+_ytdlp_cookies_from_b64_path = None
+
+
+def _yt_dlp_cookie_cli_args():
+    """Optional --cookies from file path or base64 env (Netscape cookies.txt)."""
+    global _ytdlp_cookies_from_b64_path
+    path = os.getenv("YTDLP_COOKIES_FILE", "").strip()
+    if path and Path(path).is_file():
+        return ["--cookies", path]
+    b64 = os.getenv("YTDLP_COOKIES_B64", "").strip()
+    if not b64:
+        return []
+    try:
+        if _ytdlp_cookies_from_b64_path is None:
+            fd, tmp = tempfile.mkstemp(suffix="_yt_cookies.txt")
+            os.close(fd)
+            Path(tmp).write_bytes(base64.b64decode(b64))
+            _ytdlp_cookies_from_b64_path = tmp
+        return ["--cookies", _ytdlp_cookies_from_b64_path]
+    except Exception as e:
+        print(f"⚠️ YTDLP_COOKIES_B64 invalid: {e}")
+        return []
+
+
+def _yt_dlp_is_youtube(url: str) -> bool:
     low = (url or "").lower()
-    if "youtube.com" in low or "youtu.be" in low:
-        extras.extend(
-            [
-                "--extractor-args",
-                "youtube:player_client=android,web_embedded",
-            ]
-        )
-    cookies = os.getenv("YTDLP_COOKIES_FILE", "").strip()
-    if cookies:
-        cp = Path(cookies)
-        if cp.is_file():
-            extras.extend(["--cookies", str(cp)])
-    return extras
+    return "youtube.com" in low or "youtu.be" in low
+
+
+def _yt_dlp_youtube_extractor_profiles():
+    """
+    Values for --extractor-args. None = do not set (use current yt-dlp defaults).
+    Override entirely with YTDLP_YOUTUBE_EXTRACTOR_ARGS=e.g. youtube:player_client=ios
+    """
+    custom = os.getenv("YTDLP_YOUTUBE_EXTRACTOR_ARGS", "").strip()
+    if custom:
+        return [custom]
+    return [
+        None,
+        "youtube:player_client=android_tv,tv_embedded",
+        "youtube:player_client=ios,android",
+        "youtube:player_client=web,mweb",
+        "youtube:player_client=android,web_embedded",
+        "youtube:player_client=tv_embedded",
+    ]
+
+
+def _yt_dlp_run_dump_json(url: str, profile, per_attempt_timeout: int):
+    """Single yt-dlp --dump-json run. profile=None skips --extractor-args."""
+    import json as json_module
+    cmd = [
+        sys.executable, "-m", "yt_dlp",
+        "--dump-json",
+        "--no-download",
+        "--no-playlist",
+        "--no-warnings",
+        "--socket-timeout", "25",
+    ]
+    cmd.extend(_yt_dlp_cookie_cli_args())
+    if profile:
+        cmd.extend(["--extractor-args", profile])
+    cmd.append(url)
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=per_attempt_timeout,
+    )
+    if result.returncode != 0:
+        return None, result.stderr or result.stdout or "yt-dlp failed"
+    try:
+        return json_module.loads(result.stdout), None
+    except Exception as e:
+        return None, f"JSON error: {e}"
+
+
+def _yt_dlp_dump_json_with_fallbacks(url: str, per_attempt_timeout: int = 28, max_attempts=None):
+    """
+    Try several YouTube client profiles; non-YouTube runs once.
+    Returns (info_dict, None) or (None, last_error_string).
+    max_attempts: if set, only try the first N profiles (faster for optional metadata).
+    """
+    profiles = _yt_dlp_youtube_extractor_profiles() if _yt_dlp_is_youtube(url) else [None]
+    if max_attempts is not None:
+        profiles = profiles[:max_attempts]
+    last_err = ""
+    for i, profile in enumerate(profiles):
+        label = profile or "default"
+        print(f"   yt-dlp info try {i + 1}/{len(profiles)} ({label[:80]})")
+        info, err = _yt_dlp_run_dump_json(url, profile, per_attempt_timeout)
+        if info is not None:
+            return info, None
+        last_err = err or last_err
+        if last_err:
+            print(f"   ⚠️ {last_err[:350]}")
+    return None, last_err or "All yt-dlp attempts failed"
+
+
+def _yt_dlp_download_with_fallbacks(url: str, output_template: str, per_attempt_timeout: int = 240):
+    """
+    Download audio; retry with different YouTube profiles on failure.
+    Returns (subprocess.CompletedProcess, None) on success, or (None, error_text).
+    """
+    profiles = _yt_dlp_youtube_extractor_profiles() if _yt_dlp_is_youtube(url) else [None]
+    last_err = ""
+    for i, profile in enumerate(profiles):
+        label = profile or "default"
+        print(f"   yt-dlp download try {i + 1}/{len(profiles)} ({label[:80]})")
+        cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--extract-audio",
+            "--audio-format", "mp3",
+            "--audio-quality", "192K",
+            "--output", output_template + ".%(ext)s",
+            "--no-playlist",
+            "--no-warnings",
+            "--socket-timeout", "60",
+            "--retries", "3",
+            "--print", "after_move:filepath",
+        ]
+        cmd.extend(_yt_dlp_cookie_cli_args())
+        if profile:
+            cmd.extend(["--extractor-args", profile])
+        cmd.append(url)
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=per_attempt_timeout,
+            )
+        except subprocess.TimeoutExpired:
+            last_err = f"Timeout after {per_attempt_timeout}s"
+            continue
+        if result.returncode == 0:
+            return result, None
+        last_err = result.stderr or result.stdout or "download failed"
+        print(f"   ⚠️ {last_err[:350]}")
+    return None, last_err or "All download attempts failed"
 
 
 def _yt_dlp_error_user_message(error_text: str) -> str:
@@ -1012,14 +1115,16 @@ def _yt_dlp_error_user_message(error_text: str) -> str:
         "sign in to confirm" in s
         or "not a bot" in s
         or "login required" in s
+        or ("cookies" in s and ("use --cookies" in s or "browser" in s))
         or "private video" in s
         or "video unavailable" in s
     ):
-        if "private" in s or "unavailable" in s:
+        if "private" in s or ("unavailable" in s and "bot" not in s):
             return "This video is private, unavailable, or region-blocked."
         return (
-            "YouTube is blocking automated downloads from this server (not your personal login). "
-            "Try downloading the audio on your computer and use Upload File, or use a direct link to an audio file if you have one."
+            "YouTube is still blocking this server. Options: (1) download the MP3/WAV on your device and "
+            "use Upload File — always works; (2) in Railway, set YTDLP_COOKIES_B64 to a Netscape cookies.txt "
+            "export from a browser where you’re signed into YouTube (advanced). Cloud IPs are often blocked."
         )
     if "unsupported url" in s:
         return "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, etc."
@@ -1032,8 +1137,6 @@ def url_info():
     Fetch metadata about a URL (title, duration, thumbnail) without downloading.
     Uses yt-dlp CLI for stability (library can crash the server).
     """
-    import json as json_module
-    
     data = request.get_json()
     url = data.get("url", "").strip()
     
@@ -1047,32 +1150,10 @@ def url_info():
     print(f"🔗 Fetching URL info: {url}")
     
     try:
-        # Use yt-dlp CLI instead of library (more stable, won't crash server)
-        cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "--dump-json",
-            "--no-download",
-            "--no-playlist",  # Only get single video, not entire playlist
-            "--no-warnings",
-            "--socket-timeout", "20",
-        ]
-        cmd.extend(_yt_dlp_extra_args_for_url(url))
-        cmd.append(url)
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=45  # 45 second timeout
-        )
-        
-        if result.returncode != 0:
-            error_msg = result.stderr or "Unknown error"
-            print(f"   ❌ yt-dlp error: {error_msg[:200]}")
-            return jsonify({"error": _yt_dlp_error_user_message(error_msg)}), 400
-        
-        # Parse JSON output
-        info = json_module.loads(result.stdout)
+        info, err = _yt_dlp_dump_json_with_fallbacks(url, per_attempt_timeout=28)
+        if info is None:
+            print(f"   ❌ yt-dlp error: {(err or '')[:400]}")
+            return jsonify({"error": _yt_dlp_error_user_message(err)}), 400
         
         # Format duration
         duration = info.get("duration", 0)
@@ -1098,9 +1179,6 @@ def url_info():
     except subprocess.TimeoutExpired:
         print(f"   ❌ URL fetch timed out")
         return jsonify({"error": "Request timed out. Please try again."}), 504
-    except json_module.JSONDecodeError as e:
-        print(f"   ❌ JSON parse error: {e}")
-        return jsonify({"error": "Failed to parse URL info"}), 500
     except Exception as e:
         print(f"   ❌ URL info error: {e}")
         traceback.print_exc()
@@ -1114,8 +1192,6 @@ def separate_url():
     Download audio from URL and start stem separation.
     Uses yt-dlp CLI for stability.
     """
-    import json as json_module
-    
     data = request.get_json()
     url = data.get("url", "").strip()
     
@@ -1144,37 +1220,14 @@ def separate_url():
     print(f"🔗 Downloading audio from URL: {url}")
     
     try:
-        # Download audio using yt-dlp CLI (more stable than library)
         output_template = str(UPLOAD_FOLDER / f"{job_id}_url_audio")
         
-        cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--audio-quality", "192K",
-            "--output", output_template + ".%(ext)s",
-            "--no-playlist",  # Only download single video, not entire playlist
-            "--no-warnings",
-            "--socket-timeout", "60",
-            "--retries", "3",
-            "--print", "after_move:filepath",  # Print final path
-        ]
-        cmd.extend(_yt_dlp_extra_args_for_url(url))
-        cmd.append(url)
-        
-        print(f"   Running: {' '.join(cmd[:8])}...")
-        
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=180  # 3 minute timeout for download
+        result, dl_err = _yt_dlp_download_with_fallbacks(
+            url, output_template, per_attempt_timeout=240
         )
-        
-        if result.returncode != 0:
-            error_msg = result.stderr or "Download failed"
-            print(f"   ❌ yt-dlp download error: {error_msg[:200]}")
-            return jsonify({"error": _yt_dlp_error_user_message(error_msg)}), 500
+        if result is None:
+            print(f"   ❌ yt-dlp download error: {(dl_err or '')[:400]}")
+            return jsonify({"error": _yt_dlp_error_user_message(dl_err)}), 500
         
         # Find the downloaded file
         actual_path = None
@@ -1201,21 +1254,13 @@ def separate_url():
         input_path = actual_path
         print(f"   ✅ Downloaded: {input_path.name} ({input_path.stat().st_size / 1024 / 1024:.1f} MB)")
         
-        # Get title from a quick info fetch
         title = "audio"
         try:
-            info_cmd = [
-                sys.executable, "-m", "yt_dlp",
-                "--dump-json", "--no-download",
-            ]
-            info_cmd.extend(_yt_dlp_extra_args_for_url(url))
-            info_cmd.append(url)
-            info_result = subprocess.run(info_cmd, capture_output=True, text=True, timeout=15)
-            if info_result.returncode == 0:
-                info = json_module.loads(info_result.stdout)
+            info, _ = _yt_dlp_dump_json_with_fallbacks(url, per_attempt_timeout=12, max_attempts=3)
+            if info:
                 title = info.get("title", "audio")
-        except:
-            pass  # Title is optional
+        except Exception:
+            pass
         
         # Create output directory
         job_output_dir = OUTPUT_FOLDER / job_id
