@@ -734,8 +734,9 @@ def test_ytdlp():
             "--no-playlist",
             "--no-warnings",
             "--socket-timeout", "15",
-            test_url
         ]
+        cmd.extend(_yt_dlp_extra_args_for_url(test_url))
+        cmd.append(test_url)
         
         fetch = subprocess.run(
             cmd,
@@ -982,6 +983,49 @@ def test_demucs():
 # URL EXTRACTION ENDPOINTS (YouTube, SoundCloud, Bandcamp, etc.)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _yt_dlp_extra_args_for_url(url: str) -> list:
+    """
+    Extra yt-dlp CLI args to work around YouTube bot / geo blocks on server IPs.
+    Optional: set YTDLP_COOKIES_FILE to a Netscape cookies.txt path (advanced).
+    """
+    extras = []
+    low = (url or "").lower()
+    if "youtube.com" in low or "youtu.be" in low:
+        extras.extend(
+            [
+                "--extractor-args",
+                "youtube:player_client=android,web_embedded",
+            ]
+        )
+    cookies = os.getenv("YTDLP_COOKIES_FILE", "").strip()
+    if cookies:
+        cp = Path(cookies)
+        if cp.is_file():
+            extras.extend(["--cookies", str(cp)])
+    return extras
+
+
+def _yt_dlp_error_user_message(error_text: str) -> str:
+    """Map yt-dlp stderr to a helpful message for the UI."""
+    s = (error_text or "").lower()
+    if (
+        "sign in to confirm" in s
+        or "not a bot" in s
+        or "login required" in s
+        or "private video" in s
+        or "video unavailable" in s
+    ):
+        if "private" in s or "unavailable" in s:
+            return "This video is private, unavailable, or region-blocked."
+        return (
+            "YouTube is blocking automated downloads from this server (not your personal login). "
+            "Try downloading the audio on your computer and use Upload File, or use a direct link to an audio file if you have one."
+        )
+    if "unsupported url" in s:
+        return "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, etc."
+    return f"Could not fetch URL: {(error_text or 'Unknown error')[:200]}"
+
+
 @app.route("/api/url-info", methods=["POST"])
 def url_info():
     """
@@ -1011,8 +1055,9 @@ def url_info():
             "--no-playlist",  # Only get single video, not entire playlist
             "--no-warnings",
             "--socket-timeout", "20",
-            url
         ]
+        cmd.extend(_yt_dlp_extra_args_for_url(url))
+        cmd.append(url)
         
         result = subprocess.run(
             cmd,
@@ -1024,16 +1069,7 @@ def url_info():
         if result.returncode != 0:
             error_msg = result.stderr or "Unknown error"
             print(f"   ❌ yt-dlp error: {error_msg[:200]}")
-            
-            # Friendly error messages
-            if "Unsupported URL" in error_msg:
-                return jsonify({"error": "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, etc."}), 400
-            elif "Video unavailable" in error_msg or "Private video" in error_msg:
-                return jsonify({"error": "This video is unavailable or private."}), 400
-            elif "Sign in" in error_msg:
-                return jsonify({"error": "This content requires login and cannot be accessed."}), 400
-            else:
-                return jsonify({"error": f"Could not fetch URL: {error_msg[:100]}"}), 400
+            return jsonify({"error": _yt_dlp_error_user_message(error_msg)}), 400
         
         # Parse JSON output
         info = json_module.loads(result.stdout)
@@ -1122,8 +1158,9 @@ def separate_url():
             "--socket-timeout", "60",
             "--retries", "3",
             "--print", "after_move:filepath",  # Print final path
-            url
         ]
+        cmd.extend(_yt_dlp_extra_args_for_url(url))
+        cmd.append(url)
         
         print(f"   Running: {' '.join(cmd[:8])}...")
         
@@ -1137,7 +1174,7 @@ def separate_url():
         if result.returncode != 0:
             error_msg = result.stderr or "Download failed"
             print(f"   ❌ yt-dlp download error: {error_msg[:200]}")
-            return jsonify({"error": f"Download failed: {error_msg[:100]}"}), 500
+            return jsonify({"error": _yt_dlp_error_user_message(error_msg)}), 500
         
         # Find the downloaded file
         actual_path = None
@@ -1167,7 +1204,12 @@ def separate_url():
         # Get title from a quick info fetch
         title = "audio"
         try:
-            info_cmd = [sys.executable, "-m", "yt_dlp", "--dump-json", "--no-download", url]
+            info_cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--dump-json", "--no-download",
+            ]
+            info_cmd.extend(_yt_dlp_extra_args_for_url(url))
+            info_cmd.append(url)
             info_result = subprocess.run(info_cmd, capture_output=True, text=True, timeout=15)
             if info_result.returncode == 0:
                 info = json_module.loads(info_result.stdout)
