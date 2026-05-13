@@ -263,6 +263,18 @@ def convert_audio_format(input_path, output_path, format_config, sample_rate=Non
     subprocess.run(cmd, capture_output=True, check=True)
 
 
+def stems_filter_for_request(requested_stems):
+    """
+    Map API stems value to the list passed to run_demucs().
+    None means full (multi-stem) separation.
+    """
+    if requested_stems == "all":
+        return None
+    if requested_stems == "vocals_instrumental":
+        return ["vocals", "instrumental"]
+    return [requested_stems]
+
+
 def ensure_model_downloaded(model="htdemucs"):
     """Pre-download the Demucs model to avoid timeout during separation."""
     print(f"🔄 Ensuring model {model} is downloaded...")
@@ -332,13 +344,16 @@ def run_demucs(input_path, output_dir, model="htdemucs", stems=None):
     
     # Add two-stem mode for specific extractions
     # This creates "vocals" and "no_vocals" (instrumental) stems
-    if stems and len(stems) == 1:
-        if stems[0] in ["vocals", "instrumental"]:
+    if stems:
+        if len(stems) == 2 and set(stems) == {"vocals", "instrumental"}:
             cmd.extend(["--two-stems", "vocals"])
-        elif stems[0] == "drums":
-            cmd.extend(["--two-stems", "drums"])
-        elif stems[0] == "bass":
-            cmd.extend(["--two-stems", "bass"])
+        elif len(stems) == 1:
+            if stems[0] in ["vocals", "instrumental"]:
+                cmd.extend(["--two-stems", "vocals"])
+            elif stems[0] == "drums":
+                cmd.extend(["--two-stems", "drums"])
+            elif stems[0] == "bass":
+                cmd.extend(["--two-stems", "bass"])
     
     cmd.append(str(input_path))
     
@@ -437,7 +452,7 @@ def info():
         "models": list(MODELS.keys()),
         "formats": list(OUTPUT_FORMATS.keys()),
         "sample_rates": list(SAMPLE_RATES.keys()),
-        "stems": ["vocals", "instrumental", "drums", "bass", "other", "all"],
+        "stems": ["vocals", "instrumental", "vocals_instrumental", "drums", "bass", "other", "all"],
         # Licensing info
         "license": {
             "is_trial": user_device.is_trial,
@@ -460,7 +475,7 @@ def separate():
         - audio file (multipart form)
         - quality: lightning | balanced | pristine | 6stem
         - format: wav | mp3_320 | mp3_256 | mp3_192 | flac | ogg
-        - stems: vocals | drums | bass | other | all
+        - stems: vocals | instrumental | vocals_instrumental | drums | bass | other | all
     
     Returns:
         - job_id: Poll /api/job/<job_id> for status
@@ -510,7 +525,7 @@ def separate():
     
     # Prepare job options
     model = MODELS[quality]
-    stems_filter = None if requested_stems == "all" else [requested_stems]
+    stems_filter = stems_filter_for_request(requested_stems)
     
     job_options = {
         "model": model,
@@ -1047,6 +1062,15 @@ def _yt_dlp_global_cli_extras() -> list:
     return out
 
 
+# Shown when YouTube / yt-dlp indicates automation blocked (also mapped from generic 403/cookies hints).
+_YTDLP_MSG_YOUTUBE_CLOUD_BLOCK = (
+    "YouTube blocked automated access from this server (common on cloud hosting). "
+    "We normalize links and retry, but Google may still refuse. "
+    "Fixes that work: upload the file; or set Railway env YTDLP_COOKIES_B64 (Netscape cookies.txt from a logged-in browser); "
+    "or YTDLP_FORCE_IPV4=1 / a residential HTTP proxy."
+)
+
+
 def _yt_dlp_err_looks_like_bot_block(err: str) -> bool:
     if not err:
         return False
@@ -1056,6 +1080,9 @@ def _yt_dlp_err_looks_like_bot_block(err: str) -> bool:
         or "not a bot" in s
         or "login required" in s
         or ("please sign in" in s and "youtube" in s)
+        or ("cookies" in s and ("use --cookies" in s or "browser" in s))
+        or "http error 403" in s
+        or "error 403" in s
     )
 
 
@@ -1210,24 +1237,14 @@ def _yt_dlp_download_with_fallbacks(url: str, output_template: str, per_attempt_
 def _yt_dlp_error_user_message(error_text: str) -> str:
     """Map yt-dlp stderr to a helpful message for the UI."""
     s = (error_text or "").lower()
-    if (
-        "sign in to confirm" in s
-        or "not a bot" in s
-        or "login required" in s
-        or ("cookies" in s and ("use --cookies" in s or "browser" in s))
-        or "private video" in s
-        or "video unavailable" in s
-    ):
-        if "private" in s or ("unavailable" in s and "bot" not in s):
-            return "This video is private, unavailable, or region-blocked."
-        return (
-            "YouTube blocked automated access from this server (common on cloud hosting). "
-            "We normalize links and retry, but Google may still refuse. "
-            "Fixes that work: upload the file; or set Railway env YTDLP_COOKIES_B64 (Netscape cookies.txt from a logged-in browser); "
-            "or YTDLP_FORCE_IPV4=1 / a residential HTTP proxy. "
-        )
     if "unsupported url" in s:
         return "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, etc."
+    if "private video" in s:
+        return "This video is private, unavailable, or region-blocked."
+    if "video unavailable" in s and "bot" not in s and "sign in" not in s:
+        return "This video is private, unavailable, or region-blocked."
+    if _yt_dlp_err_looks_like_bot_block(error_text or ""):
+        return _YTDLP_MSG_YOUTUBE_CLOUD_BLOCK
     return f"Could not fetch URL: {(error_text or 'Unknown error')[:200]}"
 
 
@@ -1375,7 +1392,7 @@ def separate_url():
         
         # Prepare job options
         model = MODELS[quality]
-        stems_filter = None if requested_stems == "all" else [requested_stems]
+        stems_filter = stems_filter_for_request(requested_stems)
         
         job_options = {
             "model": model,

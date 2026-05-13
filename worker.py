@@ -108,6 +108,12 @@ def process_job(job, run_demucs_func, convert_func, output_formats, sample_rates
         # Look for MP3 files (cloud mode uses --mp3) or WAV files (local mode)
         stem_files = list(stems_dir.glob("*.mp3")) or list(stems_dir.glob("*.wav"))
         
+        if requested_stems == "vocals_instrumental":
+            stem_files = sorted(
+                stem_files,
+                key=lambda p: {"vocals": 0, "no_vocals": 1}.get(p.stem, 99),
+            )
+        
         for stem_file in stem_files:
             stem_name = stem_file.stem
             
@@ -117,6 +123,13 @@ def process_job(job, run_demucs_func, convert_func, output_formats, sample_rates
                     stem_name = "instrumental"
                 elif stem_name == "vocals":
                     continue
+                else:
+                    continue
+            elif requested_stems == "vocals_instrumental":
+                if stem_name == "no_vocals":
+                    stem_name = "instrumental"
+                elif stem_name == "vocals":
+                    pass
                 else:
                     continue
             elif requested_stems != "all" and stem_name != requested_stems:
