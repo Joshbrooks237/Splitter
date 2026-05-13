@@ -19,6 +19,7 @@ import time
 import base64
 import tempfile
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from flask import Flask, request, jsonify, send_file, render_template, send_from_directory, url_for, session
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -993,7 +994,69 @@ def _yt_dlp_cookie_cli_args():
 
 def _yt_dlp_is_youtube(url: str) -> bool:
     low = (url or "").lower()
-    return "youtube.com" in low or "youtu.be" in low
+    return (
+        "youtube.com" in low
+        or "youtu.be" in low
+        or "youtube-nocookie.com" in low
+    )
+
+
+def _normalize_media_url(url: str) -> str:
+    """
+    Canonical form for YouTube so yt-dlp sees a standard watch URL (Shorts, youtu.be, embed, live).
+    """
+    u = (url or "").strip()
+    if not u:
+        return u
+    try:
+        parsed = urlparse(u)
+        host = (parsed.netloc or "").lower()
+        path = (parsed.path or "").strip("/")
+
+        if host in ("youtu.be", "www.youtu.be"):
+            vid = path.split("/")[0] if path else ""
+            if vid:
+                return f"https://www.youtube.com/watch?v={vid}"
+
+        if "youtube.com" in host or "youtube-nocookie.com" in host:
+            segments = path.split("/") if path else []
+            if "shorts" in segments:
+                idx = segments.index("shorts")
+                if idx + 1 < len(segments) and segments[idx + 1]:
+                    return f"https://www.youtube.com/watch?v={segments[idx + 1]}"
+            if "live" in segments:
+                idx = segments.index("live")
+                if idx + 1 < len(segments) and segments[idx + 1]:
+                    return f"https://www.youtube.com/watch?v={segments[idx + 1]}"
+            if segments and segments[0] == "embed" and len(segments) > 1:
+                return f"https://www.youtube.com/watch?v={segments[1]}"
+
+            qs = parse_qs(parsed.query)
+            if "v" in qs and qs["v"][0]:
+                return f"https://www.youtube.com/watch?v={qs['v'][0]}"
+    except Exception:
+        pass
+    return u
+
+
+def _yt_dlp_global_cli_extras() -> list:
+    """Optional flags for all yt-dlp runs (env-tunable on Railway)."""
+    out = []
+    if os.getenv("YTDLP_FORCE_IPV4", "").strip().lower() in ("1", "true", "yes"):
+        out.append("--force-ipv4")
+    return out
+
+
+def _yt_dlp_err_looks_like_bot_block(err: str) -> bool:
+    if not err:
+        return False
+    s = err.lower()
+    return (
+        "sign in to confirm" in s
+        or "not a bot" in s
+        or "login required" in s
+        or ("please sign in" in s and "youtube" in s)
+    )
 
 
 def _yt_dlp_youtube_extractor_profiles():
@@ -1008,6 +1071,7 @@ def _yt_dlp_youtube_extractor_profiles():
         None,
         "youtube:player_client=android_tv,tv_embedded",
         "youtube:player_client=ios,android",
+        "youtube:player_client=web_safari",
         "youtube:player_client=web,mweb",
         "youtube:player_client=android,web_embedded",
         "youtube:player_client=tv_embedded",
@@ -1025,6 +1089,7 @@ def _yt_dlp_run_dump_json(url: str, profile, per_attempt_timeout: int):
         "--no-warnings",
         "--socket-timeout", "25",
     ]
+    cmd.extend(_yt_dlp_global_cli_extras())
     cmd.extend(_yt_dlp_cookie_cli_args())
     if profile:
         cmd.extend(["--extractor-args", profile])
@@ -1049,20 +1114,37 @@ def _yt_dlp_dump_json_with_fallbacks(url: str, per_attempt_timeout: int = 28, ma
     Returns (info_dict, None) or (None, last_error_string).
     max_attempts: if set, only try the first N profiles (faster for optional metadata).
     """
-    profiles = _yt_dlp_youtube_extractor_profiles() if _yt_dlp_is_youtube(url) else [None]
-    if max_attempts is not None:
-        profiles = profiles[:max_attempts]
-    last_err = ""
-    for i, profile in enumerate(profiles):
-        label = profile or "default"
-        print(f"   yt-dlp info try {i + 1}/{len(profiles)} ({label[:80]})")
-        info, err = _yt_dlp_run_dump_json(url, profile, per_attempt_timeout)
-        if info is not None:
-            return info, None
-        last_err = err or last_err
-        if last_err:
-            print(f"   ⚠️ {last_err[:350]}")
-    return None, last_err or "All yt-dlp attempts failed"
+    profiles_all = _yt_dlp_youtube_extractor_profiles() if _yt_dlp_is_youtube(url) else [None]
+    profiles = profiles_all if max_attempts is None else profiles_all[:max_attempts]
+    allow_retry = max_attempts is None
+
+    def _run_profiles():
+        last_err = ""
+        for i, profile in enumerate(profiles):
+            label = profile or "default"
+            print(f"   yt-dlp info try {i + 1}/{len(profiles)} ({label[:80]})")
+            info, err = _yt_dlp_run_dump_json(url, profile, per_attempt_timeout)
+            if info is not None:
+                return info, None
+            last_err = err or last_err
+            if last_err:
+                print(f"   ⚠️ {last_err[:350]}")
+        return None, last_err or "All yt-dlp attempts failed"
+
+    info, err = _run_profiles()
+    if info is not None:
+        return info, None
+    if (
+        allow_retry
+        and _yt_dlp_is_youtube(url)
+        and _yt_dlp_err_looks_like_bot_block(err or "")
+        and os.getenv("YTDLP_DISABLE_DELAYED_RETRY", "").strip().lower() not in ("1", "true", "yes")
+    ):
+        delay = float(os.getenv("YTDLP_RETRY_DELAY_SEC", "6") or "6")
+        print(f"   yt-dlp info: second full pass after {delay}s (YouTube bot check)")
+        time.sleep(delay)
+        info, err = _run_profiles()
+    return info, err
 
 
 def _yt_dlp_download_with_fallbacks(url: str, output_template: str, per_attempt_timeout: int = 240):
@@ -1071,41 +1153,58 @@ def _yt_dlp_download_with_fallbacks(url: str, output_template: str, per_attempt_
     Returns (subprocess.CompletedProcess, None) on success, or (None, error_text).
     """
     profiles = _yt_dlp_youtube_extractor_profiles() if _yt_dlp_is_youtube(url) else [None]
-    last_err = ""
-    for i, profile in enumerate(profiles):
-        label = profile or "default"
-        print(f"   yt-dlp download try {i + 1}/{len(profiles)} ({label[:80]})")
-        cmd = [
-            sys.executable, "-m", "yt_dlp",
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--audio-quality", "192K",
-            "--output", output_template + ".%(ext)s",
-            "--no-playlist",
-            "--no-warnings",
-            "--socket-timeout", "60",
-            "--retries", "3",
-            "--print", "after_move:filepath",
-        ]
-        cmd.extend(_yt_dlp_cookie_cli_args())
-        if profile:
-            cmd.extend(["--extractor-args", profile])
-        cmd.append(url)
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=per_attempt_timeout,
-            )
-        except subprocess.TimeoutExpired:
-            last_err = f"Timeout after {per_attempt_timeout}s"
-            continue
-        if result.returncode == 0:
-            return result, None
-        last_err = result.stderr or result.stdout or "download failed"
-        print(f"   ⚠️ {last_err[:350]}")
-    return None, last_err or "All download attempts failed"
+
+    def _run_profiles():
+        last_err = ""
+        for i, profile in enumerate(profiles):
+            label = profile or "default"
+            print(f"   yt-dlp download try {i + 1}/{len(profiles)} ({label[:80]})")
+            cmd = [
+                sys.executable, "-m", "yt_dlp",
+                "--extract-audio",
+                "--audio-format", "mp3",
+                "--audio-quality", "192K",
+                "--output", output_template + ".%(ext)s",
+                "--no-playlist",
+                "--no-warnings",
+                "--socket-timeout", "60",
+                "--retries", "3",
+                "--print", "after_move:filepath",
+            ]
+            cmd.extend(_yt_dlp_global_cli_extras())
+            cmd.extend(_yt_dlp_cookie_cli_args())
+            if profile:
+                cmd.extend(["--extractor-args", profile])
+            cmd.append(url)
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=per_attempt_timeout,
+                )
+            except subprocess.TimeoutExpired:
+                last_err = f"Timeout after {per_attempt_timeout}s"
+                continue
+            if result.returncode == 0:
+                return result, None
+            last_err = result.stderr or result.stdout or "download failed"
+            print(f"   ⚠️ {last_err[:350]}")
+        return None, last_err or "All download attempts failed"
+
+    result, err = _run_profiles()
+    if result is not None:
+        return result, None
+    if (
+        _yt_dlp_is_youtube(url)
+        and _yt_dlp_err_looks_like_bot_block(err or "")
+        and os.getenv("YTDLP_DISABLE_DELAYED_RETRY", "").strip().lower() not in ("1", "true", "yes")
+    ):
+        delay = float(os.getenv("YTDLP_RETRY_DELAY_SEC", "6") or "6")
+        print(f"   yt-dlp download: second full pass after {delay}s (YouTube bot check)")
+        time.sleep(delay)
+        result, err = _run_profiles()
+    return result, err
 
 
 def _yt_dlp_error_user_message(error_text: str) -> str:
@@ -1122,9 +1221,10 @@ def _yt_dlp_error_user_message(error_text: str) -> str:
         if "private" in s or ("unavailable" in s and "bot" not in s):
             return "This video is private, unavailable, or region-blocked."
         return (
-            "YouTube is still blocking this server. Options: (1) download the MP3/WAV on your device and "
-            "use Upload File — always works; (2) in Railway, set YTDLP_COOKIES_B64 to a Netscape cookies.txt "
-            "export from a browser where you’re signed into YouTube (advanced). Cloud IPs are often blocked."
+            "YouTube blocked automated access from this server (common on cloud hosting). "
+            "We normalize links and retry, but Google may still refuse. "
+            "Fixes that work: upload the file; or set Railway env YTDLP_COOKIES_B64 (Netscape cookies.txt from a logged-in browser); "
+            "or YTDLP_FORCE_IPV4=1 / a residential HTTP proxy. "
         )
     if "unsupported url" in s:
         return "This URL is not supported. Try YouTube, SoundCloud, Bandcamp, etc."
@@ -1146,6 +1246,8 @@ def url_info():
     # Basic URL validation
     if not url.startswith(("http://", "https://")):
         return jsonify({"error": "Invalid URL - must start with http:// or https://"}), 400
+    
+    url = _normalize_media_url(url)
     
     print(f"🔗 Fetching URL info: {url}")
     
@@ -1197,6 +1299,11 @@ def separate_url():
     
     if not url:
         return jsonify({"error": "No URL provided"}), 400
+    
+    if not url.startswith(("http://", "https://")):
+        return jsonify({"error": "Invalid URL - must start with http:// or https://"}), 400
+    
+    url = _normalize_media_url(url)
     
     # Get options
     quality = data.get("quality", "balanced")
